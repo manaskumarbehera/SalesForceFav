@@ -1,0 +1,115 @@
+/* Existing styles */
+body,
+h1,
+h2,
+h3,
+ul,
+p {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #f7f7f7;
+  padding: 15px;
+}
+
+.container {
+  max-width: 300px;
+  margin: auto;
+  background-color: #fff;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* New or modified styles */
+.icon-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1em;
+  color: #333;
+  padding: 5px;
+}
+
+.add-button {
+  background-color: #4caf50;
+  color: white;
+  padding: 10px 20px;
+  margin: 10px;
+  border: none;
+  cursor: pointer;
+}
+
+.credential-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.list-content {
+  flex: 1;
+}
+
+.list-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.edit-button,
+.delete-button {
+  background-color: #f1f1f1;
+  color: black;
+  padding: 8px 12px;
+  cursor: pointer;
+  border: 1px solid #ccc;
+}
+
+.delete-button {
+  background-color: #f44336;
+  color: #f44336;
+  border: none;
+}
+.form-container {
+  display: flex;
+  justify-content: space-between;
+
+  flex-direction: column;
+  align-items: flex-start;
+  width: auto;
+  height: auto;
+  min-width: auto;
+  min-height: auto;
+}
+
+.form-container li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: auto;
+  min-height: auto;
+  padding: 10px;
+  box-sizing: border-box;
+  border-bottom: 1px solid #ccc;
+}
+
+/* You can adjust the width % based on your layout requirements */
+.form-container div {
+  width: 30%;
+}
+
+/* For button groups */
+.form-container .editDeleteGroup,
+.form-container .otherActionsGroup {
+  display: flex;
+  gap: 10px; /* Add some spacing between buttons */
+}
+
+/* For name container */
+.form-container .nameContainer {
+  font-weight: bold;
+  text-shadow: 1px 1px gray;
+}
