@@ -40,7 +40,7 @@ const loginToSalesforce = async (credential, loginType) => {
   const setOnCreatedListener = async (tabId, credential) => {
     const tab = await chrome.tabs.get(tabId);
     if (tabId === tab.id) {
-      console.log("Executing login script..."); // Debug log
+      console.log("Executing login script..."); 
       await chrome.scripting.executeScript(
         {
           target: { tabId: tab.id },
