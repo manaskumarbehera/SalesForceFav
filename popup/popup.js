@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (newCredentialButton) {
     newCredentialButton.addEventListener("click", () => {
       formContainer.style.display = "block";
+      formContainer.style.width = "150px";
       showNewCredentialForm(savedCredentials, formContainer);
     });
   } else {
@@ -35,12 +36,10 @@ const loginToSalesforce = async (credential, loginType) => {
     default:
       salesforceURL = "https://test.salesforce.com/";
   }
-  console.log(`Opening URL: ${salesforceURL}`); // Log the URL
 
   const setOnCreatedListener = async (tabId, credential) => {
     const tab = await chrome.tabs.get(tabId);
     if (tabId === tab.id) {
-      console.log("Executing login script..."); 
       await chrome.scripting.executeScript(
         {
           target: { tabId: tab.id },
@@ -68,8 +67,6 @@ const loginToSalesforce = async (credential, loginType) => {
   };
   const setOnUpdatedListener = (tabId, credential) => {
     chrome.tabs.onUpdated.addListener(function listener(tabIdUpdated, info) {
-      console.log(`Tab ${tabIdUpdated} updated:`, info);
-
       if (info.status === "complete" && tabId === tabIdUpdated) {
         console.log("Executing login script..."); // Debug log
         chrome.scripting.executeScript(
