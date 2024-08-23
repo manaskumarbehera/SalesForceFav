@@ -37,6 +37,14 @@ const loginToSalesforce = async (credential, loginType) => {
       salesforceURL = "https://test.salesforce.com/";
   }
 
+  
+  const removableListener = async (tab) => {
+    if (tab.url.startsWith(salesforceURL)) {
+      await setOnCreatedListener(tab.id, credential);
+      await setOnUpdatedListener(tab.id, credential);
+      chrome.tabs.onCreated.removeListener(removableListener);
+    }
+  };
   const setOnCreatedListener = async (tabId, credential) => {
     const tab = await chrome.tabs.get(tabId);
     if (tabId === tab.id) {
@@ -58,13 +66,6 @@ const loginToSalesforce = async (credential, loginType) => {
       );
     }
   };
-  const removableListener = async (tab) => {
-    if (tab.url.startsWith(salesforceURL)) {
-      await setOnCreatedListener(tab.id, credential);
-      await setOnUpdatedListener(tab.id, credential);
-      chrome.tabs.onCreated.removeListener(removableListener);
-    }
-  };
   const setOnUpdatedListener = (tabId, credential) => {
     chrome.tabs.onUpdated.addListener(function listener(tabIdUpdated, info) {
       if (info.status === "complete" && tabId === tabIdUpdated) {
@@ -77,6 +78,7 @@ const loginToSalesforce = async (credential, loginType) => {
           },
           (result) => {
             if (chrome.runtime.lastError) {
+              alert(chrome.runtime.lastError);
               console.error(chrome.runtime.lastError);
               return;
             }
