@@ -1,14 +1,21 @@
 document.addEventListener("DOMContentLoaded", function () {
-  // Define formContainer here, before the check
+  // 1. Define the formContainer element where forms will be rendered.
   const formContainer = document.getElementById("formContainer");
-  // Now you can check its existence
+
+  // 2. Check if formContainer exists in the DOM.
   if (!formContainer) {
     console.error("formContainer is not available.");
     return;
   }
+
+  // 3. Retrieve saved credentials from localStorage.
   const savedCredentials =
     JSON.parse(localStorage.getItem("credentials")) || [];
+
+  // 4. Load the saved credentials into the formContainer.
   loadCredentials(savedCredentials, formContainer);
+
+  // 5. Add an event listener to the "New Credential" button to show the form.
   const newCredentialButton = document.getElementById("newCredentialButton");
   if (newCredentialButton) {
     newCredentialButton.addEventListener("click", () => {
@@ -21,7 +28,9 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
+// 6. Function to handle login to Salesforce using different methods (new tab, new window, incognito).
 const loginToSalesforce = async (credential, loginType) => {
+  // 7. Define the Salesforce URL based on the selected environment.
   let salesforceURL;
   switch (credential.environment) {
     case "sandbox":
@@ -31,13 +40,13 @@ const loginToSalesforce = async (credential, loginType) => {
       salesforceURL = "https://login.salesforce.com/";
       break;
     case "sso":
-      salesforceURL = credential.ssourl; // Here we update the URL based on credential.ssourl
+      salesforceURL = credential.ssourl; // Update URL for SSO.
       break;
     default:
       salesforceURL = "https://test.salesforce.com/";
   }
 
-  
+  // 8. Define a removable listener to handle newly created tabs.
   const removableListener = async (tab) => {
     if (tab.url.startsWith(salesforceURL)) {
       await setOnCreatedListener(tab.id, credential);
@@ -45,6 +54,8 @@ const loginToSalesforce = async (credential, loginType) => {
       chrome.tabs.onCreated.removeListener(removableListener);
     }
   };
+
+  // 9. Listener to execute login script when a new tab is created.
   const setOnCreatedListener = async (tabId, credential) => {
     const tab = await chrome.tabs.get(tabId);
     if (tabId === tab.id) {
@@ -66,6 +77,8 @@ const loginToSalesforce = async (credential, loginType) => {
       );
     }
   };
+
+  // 10. Listener to execute login script when a tab is updated.
   const setOnUpdatedListener = (tabId, credential) => {
     chrome.tabs.onUpdated.addListener(function listener(tabIdUpdated, info) {
       if (info.status === "complete" && tabId === tabIdUpdated) {
@@ -88,6 +101,8 @@ const loginToSalesforce = async (credential, loginType) => {
       }
     });
   };
+
+  // 11. Handle login in a new window or incognito mode.
   if (loginType === "newWindow" || loginType === "incognito") {
     const incognito = loginType === "incognito";
     chrome.windows.create({ url: salesforceURL, incognito }, function (window) {
@@ -110,7 +125,9 @@ const loginToSalesforce = async (credential, loginType) => {
         );
       }
     });
-  } else if (loginType === "newTab") {
+  } 
+  // 12. Handle login in a new tab.
+  else if (loginType === "newTab") {
     const tab = await chrome.tabs.create({
       url: salesforceURL,
       active: true,
@@ -118,9 +135,10 @@ const loginToSalesforce = async (credential, loginType) => {
     setOnCreatedListener(tab.id, credential);
   }
 };
+
 /*************************************************************************************** */
 
-// New function to check for login success
+// 13. Function to check for successful login and change favicon color.
 function checkLoginSuccess(tabId, faviconColor) {
   return async function (tabIdUpdated, info) {
     if (tabId === tabIdUpdated && info.status === "complete") {
@@ -129,7 +147,7 @@ function checkLoginSuccess(tabId, faviconColor) {
         const url = new URL(tab.url);
         console.log("Logged-in URL Origin: ", url.origin);
 
-        // Change the favicon for all tabs with the same origin
+        // 14. Change the favicon for all tabs with the same origin.
         chrome.tabs.query({}, function (tabs) {
           tabs.forEach((tab) => {
             const tabUrl = new URL(tab.url);
@@ -144,7 +162,7 @@ function checkLoginSuccess(tabId, faviconColor) {
   };
 }
 
-// New function to change the favicon
+// 15. Function to change the favicon icon color.
 function changeFavicon(tabId, color) {
   chrome.scripting.executeScript(
     {
@@ -168,8 +186,8 @@ function changeFavicon(tabId, color) {
           let imageData = ctx.getImageData(0, 0, img.width, img.height),
             data = imageData.data;
 
+          // 16. Change the color of all pixels to the specified color.
           for (let i = 0; i < data.length; i += 4) {
-            // Change the color of all pixels to the specified color.
             data[i] = color[0]; // red
             data[i + 1] = color[1]; // green
             data[i + 2] = color[2]; // blue
@@ -193,7 +211,10 @@ function changeFavicon(tabId, color) {
     }
   );
 }
+
 /*************************************************************************************** */
+
+// 17. Function to simulate login to Salesforce.
 async function loginSalesforce(username, password) {
   try {
     const usernameField = document.getElementById("username");
@@ -204,7 +225,7 @@ async function loginSalesforce(username, password) {
       throw new Error("Username field not found.");
     }
 
-    // Simulate some delay to make sure everything is loaded
+    // 18. Simulate a delay to ensure the page is fully loaded.
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     usernameField.value = username;
@@ -221,15 +242,17 @@ async function loginSalesforce(username, password) {
       throw new Error("Login button not found.");
     }
 
+    // 19. Trigger the login button click event.
     loginButton.click();
   } catch (error) {
     console.error("An error occurred:", error);
 
-    // Optionally, notify the user
+    // 20. Notify the user if an error occurs during login.
     alert(" An error occurred while trying to log in. Please try again.");
   }
 }
 
+// 21. Functions to initiate login in different modes (new window, incognito, new tab).
 const openInWindow = (credential) => {
   loginToSalesforce(credential, "newWindow");
 };
@@ -237,10 +260,12 @@ const openInWindow = (credential) => {
 const openIncognito = (credential) => {
   loginToSalesforce(credential, "incognito");
 };
+
 const openInTab = (credential) => {
   loginToSalesforce(credential, "newTab");
 };
 
+// 22. Function to load saved credentials and display them in the UI.
 function loadCredentials(savedCredentials, formContainer) {
   const credentialList = document.getElementById("credentialList");
   if (!credentialList) {
@@ -249,6 +274,7 @@ function loadCredentials(savedCredentials, formContainer) {
   }
   credentialList.innerHTML = "";
 
+  // 23. Loop through saved credentials and create a list item for each.
   savedCredentials.forEach((credential, index) => {
     const listItem = createListItem(
       credential,
@@ -259,6 +285,8 @@ function loadCredentials(savedCredentials, formContainer) {
     credentialList.appendChild(listItem);
   });
 }
+
+// 24. Function to create a list item for each credential.
 function createListItem(credential, index, savedCredentials, formContainer) {
   const listItem = document.createElement("li");
   listItem.style.display = "flex";
@@ -280,12 +308,12 @@ function createListItem(credential, index, savedCredentials, formContainer) {
   nameContainer.appendChild(nameText);
   listItem.appendChild(nameContainer);
 
-  // Create a div to group 'Edit' and 'Delete' buttons
+  // 25. Create a div to group 'Edit' and 'Delete' buttons.
   const editDeleteGroup = document.createElement("div");
   editDeleteGroup.style.margin = "0 10px";
   editDeleteGroup.style.display = "flex";
 
-  // Create a div to group 'Tab', 'Window' and 'Incognito' buttons
+  // 26. Create a div to group 'Tab', 'Window' and 'Incognito' buttons.
   const otherActionsGroup = document.createElement("div");
   otherActionsGroup.style.margin = "0 10px";
   otherActionsGroup.style.display = "flex";
@@ -293,6 +321,7 @@ function createListItem(credential, index, savedCredentials, formContainer) {
   const buttonTypesEditDelete = ["Edit", "Delete"];
   const buttonTypesOther = ["Tab", "Window", "Incognito"];
 
+  // 27. Loop to create 'Edit' and 'Delete' buttons.
   buttonTypesEditDelete.forEach((type) => {
     const btn = createButton(type, () =>
       handleButtonClick(
@@ -306,6 +335,7 @@ function createListItem(credential, index, savedCredentials, formContainer) {
     editDeleteGroup.appendChild(btn);
   });
 
+  // 28. Loop to create 'Tab', 'Window', and 'Incognito' buttons.
   buttonTypesOther.forEach((type) => {
     const btn = createButton(type, () =>
       handleButtonClick(
@@ -324,6 +354,8 @@ function createListItem(credential, index, savedCredentials, formContainer) {
 
   return listItem;
 }
+
+// 29. Function to create a button element with appropriate icon and click event.
 function createButton(text, onClick) {
   const button = document.createElement("button");
   button.onclick = onClick;
@@ -354,6 +386,8 @@ function createButton(text, onClick) {
   button.innerHTML = unicodeChar; // set button content to Unicode character
   return button;
 }
+
+// 30. Function to handle different button clicks (Edit, Delete, Tab, Window, Incognito).
 function handleButtonClick(
   type,
   index,
@@ -379,12 +413,15 @@ function handleButtonClick(
       break;
   }
 }
+
+// 31. Function to delete a credential from the list.
 function deleteCredential(index, savedCredentials, formContainer) {
   savedCredentials.splice(index, 1);
   localStorage.setItem("credentials", JSON.stringify(savedCredentials));
   loadCredentials(savedCredentials, formContainer);
 }
 
+// 32. Function to show the form for creating a new credential or editing an existing one.
 function showNewCredentialForm(
   savedCredentials,
   formContainer,
@@ -405,6 +442,7 @@ function showNewCredentialForm(
   );
 
   environmentField.addEventListener("change", function () {
+    // 33. Show/hide fields based on the environment (SSO or standard login).
     if (this.value === "sso") {
       ssoUrlFieldContainer.style.display = "block";
       usernameFieldContainer.style.display = "none";
@@ -420,6 +458,7 @@ function showNewCredentialForm(
     }
   });
 
+  // 34. Handle form submission to save the credential.
   form.addEventListener("submit", function (event) {
     event.preventDefault();
 
@@ -439,7 +478,7 @@ function showNewCredentialForm(
       faviconColor,
     };
 
-    // If we are editing a credential, replace it; otherwise, add new
+    // 35. If editing an existing credential, update it; otherwise, add new.
     if (editIndex !== null) {
       savedCredentials[editIndex] = newCredential;
     } else {
@@ -452,7 +491,8 @@ function showNewCredentialForm(
     formContainer.innerHTML = "";
     formContainer.style.display = "none";
   });
-  // Add event listener for the "Cancel" button
+
+  // 36. Add event listener for the "Cancel" button to close the form.
   const cancelButton = document.getElementById("cancelForm");
   if (cancelButton) {
     cancelButton.addEventListener("click", function (event) {
@@ -463,6 +503,7 @@ function showNewCredentialForm(
   }
 }
 
+// 37. Function to edit an existing credential.
 function editCredential(index, savedCredentials, formContainer) {
   if (!formContainer) {
     console.error("formContainer is not available.");
@@ -486,6 +527,8 @@ function editCredential(index, savedCredentials, formContainer) {
   const passwordFieldContainer = document.getElementById(
     "passwordFieldContainer"
   );
+
+  // 38. Populate the form with existing data if editing a credential.
 
   if (credentialNameField && environmentField && faviconColorField) {
     credentialNameField.value = credential.credentialName || "";
@@ -520,6 +563,8 @@ function editCredential(index, savedCredentials, formContainer) {
     console.error("One or more form fields are not available.");
   }
 }
+
+// 39. Define the HTML structure for the form to add/edit credentials.
 
 const formHtml = `
   <form id="newCredentialForm" class="form-container" style="display: flex; flex-direction: column; width: 50%;">
@@ -560,6 +605,7 @@ const formHtml = `
   </form>
 `;
 
+// 40. Helper function to convert a HEX color to RGB.
 function hexToRgb(hex) {
   const bigint = parseInt(hex.substring(1), 16);
   const r = (bigint >> 16) & 255;
