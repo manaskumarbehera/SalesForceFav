@@ -5,8 +5,12 @@ Enhance the **Add Credential** functionality by allowing users to input and save
 - Adding validation checks for all input fields (e.g., environment, username, password, SSO URL).
 - Ensuring unique credential names.
 - Providing user feedback on successful or failed additions.
+- Improvethe Add icon and when formContainer is opened then change the + icon to multiply icon and make use of  class="action-icon" for the icon
+- chnage the save and cncel icon <input type="submit" value="💾" />
+    <button id="cancelForm">🚫</button>
 
 The form should be easily accessible, user-friendly, and display real-time error messages if required fields are not filled in or if there are conflicts, such as duplicate credential names.
+
 
 ## 2. Credential Search Functionality
 
