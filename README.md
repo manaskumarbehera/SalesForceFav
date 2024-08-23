@@ -1,7 +1,11 @@
 ## 1. Add Credential Functionality
+   Investiage the automation test  for this extension
+
+## 2. Add Credential Functionality
 
 Enhance the **Add Credential** functionality by allowing users to input and save credentials with more detailed information. This includes:
 
+- Make the changes to the add credential icon dynamic (+) so that its hould be changed to cancel icon when its clicked and used icon class instead of the actual hardcoded symbol
 - Adding validation checks for all input fields (e.g., environment, username, password, SSO URL).
 - Ensuring unique credential names.
 - Providing user feedback on successful or failed additions.
@@ -12,7 +16,7 @@ Enhance the **Add Credential** functionality by allowing users to input and save
 The form should be easily accessible, user-friendly, and display real-time error messages if required fields are not filled in or if there are conflicts, such as duplicate credential names.
 
 
-## 2. Credential Search Functionality
+## 3. Credential Search Functionality
 
 Implement a **search functionality** that allows users to quickly find saved credentials. This search feature should:
 
@@ -22,7 +26,7 @@ Implement a **search functionality** that allows users to quickly find saved cre
 
 The search bar should be prominently placed, and the results should update dynamically as the user types.
 
-## 3. Import and Export Functionality
+## 4. Import and Export Functionality
 
 Add **import and export functionalities** to allow users to back up and restore their saved credentials. This includes:
 
