@@ -152,7 +152,7 @@ function checkLoginSuccess(tabId, faviconColor) {
           tabs.forEach((tab) => {
             const tabUrl = new URL(tab.url);
             if (tabUrl.origin === url.origin) {
-              color = hexToRgb(faviconColor);
+              const color = hexToRgb(faviconColor);
               changeFavicon(tab.id, color);
             }
           });
