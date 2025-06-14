@@ -141,6 +141,7 @@ const loginToSalesforce = async (credential, loginType) => {
   }
 };
 
+
 /*************************************************************************************** */
 
 // 13. Function to check for successful login and change favicon color.
