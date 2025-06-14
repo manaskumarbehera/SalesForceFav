@@ -134,6 +134,7 @@ const loginToSalesforce = async (credential, loginType) => {
     });
     if (tab && tab.id) {
       await setOnCreatedListener(tab.id, credential);
+      await setOnUpdatedListener(tab.id, credential);
     } else {
       console.error("Failed to create tab for newTab login.");
     }
