@@ -128,11 +128,11 @@ const loginToSalesforce = async (credential, loginType) => {
   } 
   // 12. Handle login in a new tab.
   else if (loginType === "newTab") {
-    const tab = await chrome.tabs.create({
+    chrome.tabs.onCreated.addListener(removableListener);
+    await chrome.tabs.create({
       url: salesforceURL,
       active: true,
     });
-    setOnCreatedListener(tab.id, credential);
   }
 };
 
