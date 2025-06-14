@@ -46,14 +46,7 @@ const loginToSalesforce = async (credential, loginType) => {
       salesforceURL = "https://test.salesforce.com/";
   }
 
-  // 8. Define a removable listener to handle newly created tabs.
-  const removableListener = async (tab) => {
-    if (tab.url.startsWith(salesforceURL)) {
-      await setOnCreatedListener(tab.id, credential);
-      await setOnUpdatedListener(tab.id, credential);
-      chrome.tabs.onCreated.removeListener(removableListener);
-    }
-  };
+
 
   // 9. Listener to execute login script when a new tab is created.
   const setOnCreatedListener = async (tabId, credential) => {
@@ -95,6 +88,9 @@ const loginToSalesforce = async (credential, loginType) => {
               console.error(chrome.runtime.lastError);
               return;
             }
+            chrome.tabs.onUpdated.addListener(
+              checkLoginSuccess(tabId, credential.faviconColor)
+            );
           }
         );
         chrome.tabs.onUpdated.removeListener(listener);
@@ -128,11 +124,15 @@ const loginToSalesforce = async (credential, loginType) => {
   } 
   // 12. Handle login in a new tab.
   else if (loginType === "newTab") {
-    chrome.tabs.onCreated.addListener(removableListener);
-    await chrome.tabs.create({
+    const tab = await chrome.tabs.create({
       url: salesforceURL,
       active: true,
     });
+    if (tab && tab.id) {
+      await setOnUpdatedListener(tab.id, credential);
+    } else {
+      console.error("Failed to create tab for newTab login.");
+    }
   }
 };
 
