@@ -60,39 +60,62 @@ To use **Incognito** logins, open the extension's **Details** page and enable
 ## Project structure
 
 ```
-manifest.json   # MV3 manifest (permissions, popup entry)
+manifest.json        # MV3 manifest (permissions, popup entry)
 popup/
-  popup.html    # Popup UI
-  popup.css     # Popup styles
-  popup.js      # Storage, UI, and login automation logic
+  popup.html         # Popup UI
+  popup.css          # Popup styles
+  popup.js           # DOM, chrome.* and login automation (side effects)
+  credentials.js     # Pure, unit-tested credential logic (SFFav)
+tests/               # Jest unit tests
+scripts/build.mjs    # Stages runtime files into dist/
+build.sh             # Builds + zips Chrome/Edge packages
 ```
 
 ## Development
 
-There is no build step — edit the source files and reload the extension from
-`chrome://extensions/`. For contributor and AI-agent guidance see [AGENT.md](./AGENT.md).
+The extension ships as plain scripts with **no runtime build step** — edit the source
+and reload from `chrome://extensions/`. npm is used only for dev tooling.
+
+```bash
+npm install            # install dev tooling (once)
+npm test               # run the jest unit tests
+npm run lint           # eslint
+npm run format         # prettier --write
+npm run validate       # lint + test (what CI runs)
+./build.sh             # build + zip Chrome and Edge packages → build/
+./build.sh chrome      # build a single store target
+```
+
+A single Manifest V3 build serves both the **Chrome Web Store** and the
+**Microsoft Edge Add-ons** store. CI (`.github/workflows/ci.yml`) runs lint, tests,
+and a build on every push. For contributor and AI-agent guidance see
+[AGENT.md](./AGENT.md).
 
 ## Roadmap
 
 Planned and in-progress enhancements:
 
 ### Add Credential improvements
-- Make the add (**+**) icon dynamic — switch to a cancel (**×**) icon when the form is
-  open, using an `action-icon` class instead of a hardcoded symbol.
-- Validate all input fields (environment, username, password, SSO URL).
-- Enforce **unique credential names**.
-- Show real-time success/error feedback messages.
-- Replace the hardcoded save (💾) / cancel (🚫) controls with icon-class buttons.
+
+- [x] Validate all input fields (environment, username, password, SSO URL).
+- [x] Enforce **unique credential names**.
+- [x] Show inline error feedback messages (no blocking `alert`).
+- [ ] Make the add (**+**) icon dynamic — switch to a cancel (**×**) icon when the form
+      is open, using an `action-icon` class instead of a hardcoded symbol.
+- [ ] Replace the hardcoded save (💾) / cancel (🚫) controls with icon-class buttons.
 
 ### Search
+
 - Real-time, case-insensitive filtering of saved credentials.
 - Support partial matches across name, environment, and other metadata.
 
 ### Import / Export
+
 - Export all credentials to a JSON backup file.
 - Import credentials from a JSON file, with error handling for bad formats and duplicates.
 
 ### Testing
+
 - Investigate and add automated tests for the extension.
 
 ## Privacy

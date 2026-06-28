@@ -9,8 +9,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // 3. Retrieve saved credentials from localStorage.
-  const savedCredentials =
-    JSON.parse(localStorage.getItem("credentials")) || [];
+  const savedCredentials = JSON.parse(localStorage.getItem("credentials")) || [];
 
   // 4. Load the saved credentials into the formContainer.
   loadCredentials(savedCredentials, formContainer);
@@ -30,23 +29,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // 6. Function to handle login to Salesforce using different methods (new tab, new window, incognito).
 const loginToSalesforce = async (credential, loginType) => {
-  // 7. Define the Salesforce URL based on the selected environment.
-  let salesforceURL;
-  switch (credential.environment) {
-    case "sandbox":
-      salesforceURL = "https://test.salesforce.com/";
-      break;
-    case "production":
-      salesforceURL = "https://login.salesforce.com/";
-      break;
-    case "sso":
-      salesforceURL = credential.ssourl; // Update URL for SSO.
-      break;
-    default:
-      salesforceURL = "https://test.salesforce.com/";
+  // 7. Resolve the Salesforce URL for this credential's environment (shared logic).
+  const salesforceURL = SFFav.resolveSalesforceUrl(credential);
+  if (!salesforceURL) {
+    console.error("Could not resolve a Salesforce URL for this credential.");
+    return;
   }
-
-
 
   // 9. Listener to execute login script when a new tab is created.
   const setOnCreatedListener = async (tabId, credential) => {
@@ -63,9 +51,7 @@ const loginToSalesforce = async (credential, loginType) => {
             console.error(chrome.runtime.lastError);
             return;
           }
-          chrome.tabs.onUpdated.addListener(
-            checkLoginSuccess(tab.id, credential.faviconColor)
-          );
+          chrome.tabs.onUpdated.addListener(checkLoginSuccess(tab.id, credential.faviconColor));
         }
       );
     }
@@ -88,9 +74,7 @@ const loginToSalesforce = async (credential, loginType) => {
               console.error(chrome.runtime.lastError);
               return;
             }
-            chrome.tabs.onUpdated.addListener(
-              checkLoginSuccess(tabId, credential.faviconColor)
-            );
+            chrome.tabs.onUpdated.addListener(checkLoginSuccess(tabId, credential.faviconColor));
           }
         );
         chrome.tabs.onUpdated.removeListener(listener);
@@ -111,17 +95,13 @@ const loginToSalesforce = async (credential, loginType) => {
         );
         setOnCreatedListener(tab.id, credential);
       } else {
-        console.error(
-          `No tab found in the new ${
-            incognito ? "Incognito" : "Regular"
-          } window.`
-        );
+        console.error(`No tab found in the new ${incognito ? "Incognito" : "Regular"} window.`);
         alert(
           " go to chrome://extensions/ , find the SalesForceFav extension, and then click on the Details button.Enable  Allow in Incognito"
         );
       }
     });
-  } 
+  }
   // 12. Handle login in a new tab.
   else if (loginType === "newTab") {
     const tab = await chrome.tabs.create({
@@ -136,78 +116,104 @@ const loginToSalesforce = async (credential, loginType) => {
   }
 };
 
-
 /*************************************************************************************** */
 
 // 13. Function to check for successful login and change favicon color.
 function checkLoginSuccess(tabId, faviconColor) {
-  return async function (tabIdUpdated, info) {
-    if (tabId === tabIdUpdated && info.status === "complete") {
-      const tab = await chrome.tabs.get(tabIdUpdated);
-      if (tab && tab.url) {
-        const url = new URL(tab.url);
-        console.log("Logged-in URL Origin: ", url.origin);
+  const listener = async function (tabIdUpdated, info) {
+    if (tabId !== tabIdUpdated || info.status !== "complete") return;
 
-        // 14. Change the favicon for all tabs with the same origin.
-        chrome.tabs.query({}, function (tabs) {
-          tabs.forEach((tab) => {
-            const tabUrl = new URL(tab.url);
-            if (tabUrl.origin === url.origin) {
-              const color = hexToRgb(faviconColor);
-              changeFavicon(tab.id, color);
-            }
-          });
-        });
-      }
+    // Run once: stop listening after the target tab finishes loading.
+    chrome.tabs.onUpdated.removeListener(listener);
+
+    const tab = await chrome.tabs.get(tabIdUpdated);
+    if (!tab || !tab.url) return;
+
+    let origin;
+    try {
+      origin = new URL(tab.url).origin;
+    } catch {
+      return; // Not a parseable URL (e.g. chrome:// pages) — nothing to do.
     }
+
+    // 14. Change the favicon for all tabs sharing the logged-in origin.
+    const color = SFFav.hexToRgb(faviconColor);
+    chrome.tabs.query({}, function (tabs) {
+      tabs.forEach((t) => {
+        if (!t.url) return;
+        let tabOrigin;
+        try {
+          tabOrigin = new URL(t.url).origin;
+        } catch {
+          return; // Skip tabs whose URL can't be parsed.
+        }
+        if (tabOrigin === origin) {
+          changeFavicon(t.id, color);
+        }
+      });
+    });
   };
+  return listener;
 }
 
 // 15. Function to change the favicon icon color.
+// The injected function runs in the PAGE context, so it must be self-contained:
+// it cannot reference chrome.* or anything from the popup scope. The current
+// favicon URL is resolved from the page itself and passed in via args.
 function changeFavicon(tabId, color) {
   chrome.scripting.executeScript(
     {
       target: { tabId },
       function: (color) => {
-        let link =
-          document.querySelector("link[rel*='icon']") ||
-          document.createElement("link");
-        link.type = "image/x-icon";
-        link.rel = "shortcut icon";
+        try {
+          const existing = document.querySelector("link[rel*='icon']");
+          const faviconUrl =
+            (existing && existing.href) || new URL("/favicon.ico", location.origin).href;
 
-        let canvas = document.createElement("canvas"),
-          ctx = canvas.getContext("2d"),
-          img = new Image();
+          const link = existing || document.createElement("link");
+          link.type = "image/x-icon";
+          link.rel = "shortcut icon";
 
-        img.onload = function () {
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.drawImage(img, 0, 0);
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          const img = new Image();
+          img.crossOrigin = "anonymous";
 
-          let imageData = ctx.getImageData(0, 0, img.width, img.height),
-            data = imageData.data;
+          img.onload = function () {
+            try {
+              canvas.width = img.width;
+              canvas.height = img.height;
+              ctx.drawImage(img, 0, 0);
 
-          // 16. Change the color of all pixels to the specified color.
-          for (let i = 0; i < data.length; i += 4) {
-            data[i] = color[0]; // red
-            data[i + 1] = color[1]; // green
-            data[i + 2] = color[2]; // blue
-          }
+              const imageData = ctx.getImageData(0, 0, img.width, img.height);
+              const data = imageData.data;
 
-          ctx.putImageData(imageData, 0, 0);
+              // 16. Tint every opaque pixel to the specified color.
+              for (let i = 0; i < data.length; i += 4) {
+                data[i] = color[0]; // red
+                data[i + 1] = color[1]; // green
+                data[i + 2] = color[2]; // blue
+              }
 
-          link.href = canvas.toDataURL("image/x-icon");
-          document.getElementsByTagName("head")[0].appendChild(link);
-        };
+              ctx.putImageData(imageData, 0, 0);
+              link.href = canvas.toDataURL("image/x-icon");
+              document.getElementsByTagName("head")[0].appendChild(link);
+            } catch (e) {
+              // Cross-origin favicons taint the canvas; skip recoloring then.
+              console.error("Favicon recolor failed:", e);
+            }
+          };
 
-        img.src = chrome.tabs.get(tabId).favicon;
+          img.src = faviconUrl;
+        } catch (e) {
+          console.error("Favicon setup failed:", e);
+        }
       },
       args: [color],
     },
-    (result) => {
+    () => {
       if (chrome.runtime.lastError) {
         console.error(chrome.runtime.lastError);
-        return;
       }
     }
   );
@@ -277,12 +283,7 @@ function loadCredentials(savedCredentials, formContainer) {
 
   // 23. Loop through saved credentials and create a list item for each.
   savedCredentials.forEach((credential, index) => {
-    const listItem = createListItem(
-      credential,
-      index,
-      savedCredentials,
-      formContainer
-    );
+    const listItem = createListItem(credential, index, savedCredentials, formContainer);
     credentialList.appendChild(listItem);
   });
 }
@@ -325,13 +326,7 @@ function createListItem(credential, index, savedCredentials, formContainer) {
   // 27. Loop to create 'Edit' and 'Delete' buttons.
   buttonTypesEditDelete.forEach((type) => {
     const btn = createButton(type, () =>
-      handleButtonClick(
-        type.toLowerCase(),
-        index,
-        credential,
-        savedCredentials,
-        formContainer
-      )
+      handleButtonClick(type.toLowerCase(), index, credential, savedCredentials, formContainer)
     );
     editDeleteGroup.appendChild(btn);
   });
@@ -339,13 +334,7 @@ function createListItem(credential, index, savedCredentials, formContainer) {
   // 28. Loop to create 'Tab', 'Window', and 'Incognito' buttons.
   buttonTypesOther.forEach((type) => {
     const btn = createButton(type, () =>
-      handleButtonClick(
-        type.toLowerCase(),
-        index,
-        credential,
-        savedCredentials,
-        formContainer
-      )
+      handleButtonClick(type.toLowerCase(), index, credential, savedCredentials, formContainer)
     );
     otherActionsGroup.appendChild(btn);
   });
@@ -389,13 +378,7 @@ function createButton(text, onClick) {
 }
 
 // 30. Function to handle different button clicks (Edit, Delete, Tab, Window, Incognito).
-function handleButtonClick(
-  type,
-  index,
-  credential,
-  savedCredentials,
-  formContainer
-) {
+function handleButtonClick(type, index, credential, savedCredentials, formContainer) {
   switch (type) {
     case "edit":
       editCredential(index, savedCredentials, formContainer);
@@ -423,11 +406,7 @@ function deleteCredential(index, savedCredentials, formContainer) {
 }
 
 // 32. Function to show the form for creating a new credential or editing an existing one.
-function showNewCredentialForm(
-  savedCredentials,
-  formContainer,
-  editIndex = null
-) {
+function showNewCredentialForm(savedCredentials, formContainer, editIndex = null) {
   formContainer.innerHTML = formHtml;
 
   const form = document.getElementById("newCredentialForm");
@@ -435,12 +414,8 @@ function showNewCredentialForm(
   // Event Listener for 'Environment' field
   const environmentField = document.getElementById("environment");
   const ssoUrlFieldContainer = document.getElementById("ssoUrlFieldContainer");
-  const usernameFieldContainer = document.getElementById(
-    "usernameFieldContainer"
-  );
-  const passwordFieldContainer = document.getElementById(
-    "passwordFieldContainer"
-  );
+  const usernameFieldContainer = document.getElementById("usernameFieldContainer");
+  const passwordFieldContainer = document.getElementById("passwordFieldContainer");
 
   environmentField.addEventListener("change", function () {
     // 33. Show/hide fields based on the environment (SSO or standard login).
@@ -463,21 +438,21 @@ function showNewCredentialForm(
   form.addEventListener("submit", function (event) {
     event.preventDefault();
 
-    const credentialName = document.getElementById("credentialName").value;
-    const environment = document.getElementById("environment").value;
-    const ssourl = document.getElementById("ssourl").value;
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
-    const faviconColor = document.getElementById("faviconColor").value;
-
     const newCredential = {
-      credentialName,
-      environment,
-      ssourl,
-      username,
-      password,
-      faviconColor,
+      credentialName: document.getElementById("credentialName").value.trim(),
+      environment: document.getElementById("environment").value,
+      ssourl: document.getElementById("ssourl").value.trim(),
+      username: document.getElementById("username").value.trim(),
+      password: document.getElementById("password").value,
+      faviconColor: document.getElementById("faviconColor").value,
     };
+
+    // 34a. Validate (required fields + unique name) before saving.
+    const { valid, errors } = SFFav.validateCredential(newCredential, savedCredentials, editIndex);
+    if (!valid) {
+      showFormErrors(errors);
+      return;
+    }
 
     // 35. If editing an existing credential, update it; otherwise, add new.
     if (editIndex !== null) {
@@ -522,12 +497,8 @@ function editCredential(index, savedCredentials, formContainer) {
   const passwordField = document.getElementById("password");
   const ssoUrlField = document.getElementById("ssourl");
   const ssoUrlFieldContainer = document.getElementById("ssoUrlFieldContainer");
-  const usernameFieldContainer = document.getElementById(
-    "usernameFieldContainer"
-  );
-  const passwordFieldContainer = document.getElementById(
-    "passwordFieldContainer"
-  );
+  const usernameFieldContainer = document.getElementById("usernameFieldContainer");
+  const passwordFieldContainer = document.getElementById("passwordFieldContainer");
 
   // 38. Populate the form with existing data if editing a credential.
 
@@ -552,14 +523,8 @@ function editCredential(index, savedCredentials, formContainer) {
       usernameField.required = true;
       passwordField.required = true;
     }
-
-    const cancelButton = document.getElementById("cancelForm");
-    if (cancelButton) {
-      cancelButton.addEventListener("click", function () {
-        formContainer.style.display = "none"; // Hide the form
-        editIndex = null;
-      });
-    }
+    // The Cancel button is already wired in showNewCredentialForm(); no extra
+    // handler is needed here (the previous one referenced an out-of-scope var).
   } else {
     console.error("One or more form fields are not available.");
   }
@@ -569,6 +534,7 @@ function editCredential(index, savedCredentials, formContainer) {
 
 const formHtml = `
   <form id="newCredentialForm" class="form-container" style="display: flex; flex-direction: column; width: 50%;">
+   <div id="formErrors" class="form-errors" role="alert" style="display:none;"></div>
    <label for="environment">Environment:</label>
     <select id="environment" required>
       <option value="" disabled selected>Select environment</option>
@@ -606,12 +572,19 @@ const formHtml = `
   </form>
 `;
 
-// 40. Helper function to convert a HEX color to RGB.
-function hexToRgb(hex) {
-  const bigint = parseInt(hex.substring(1), 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
-
-  return [r, g, b];
+// 40. Render validation errors inline in the form (no blocking alert()).
+function showFormErrors(errors) {
+  const container = document.getElementById("formErrors");
+  if (!container) return;
+  const messages = Object.keys(errors).map((field) => errors[field]);
+  if (messages.length === 0) {
+    container.style.display = "none";
+    container.textContent = "";
+    return;
+  }
+  container.innerHTML = messages.map((m) => `<div>• ${m}</div>`).join("");
+  container.style.display = "block";
 }
+
+// HEX→RGB conversion now lives in popup/credentials.js (SFFav.hexToRgb) so it
+// can be unit-tested; see tests/credentials.test.js.

@@ -1,115 +1,126 @@
-  /* Existing styles */
-  body,
-  h1,
-  h2,
-  h3,
-  ul,
-  p {
-    margin: 0;
-    padding: 0;
-  }
+/* Existing styles */
+body,
+h1,
+h2,
+h3,
+ul,
+p {
+  margin: 0;
+  padding: 0;
+}
 
-  body {
-    background-color: #f7f7f7;
-    padding: 15px;
-  }
+body {
+  background-color: #f7f7f7;
+  padding: 15px;
+}
 
-  .container {
-    max-width: 300px;
-    margin: auto;
-    background-color: #fff;
-    padding: 10px;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
+.container {
+  max-width: 300px;
+  margin: auto;
+  background-color: #fff;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
 
-  /* New or modified styles */
-  .icon-button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1.1em;
-    color: #333;
-    padding: 5px;
-  }
+/* Inline form validation errors */
+.form-errors {
+  background-color: #fdecea;
+  color: #b71c1c;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 8px;
+  font-size: 0.85em;
+}
 
-  .add-button {
-    background-color: #4caf50;
-    color: white;
-    padding: 10px 20px;
-    margin: 10px;
-    border: none;
-    cursor: pointer;
-  }
+/* New or modified styles */
+.icon-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1em;
+  color: #333;
+  padding: 5px;
+}
 
-  .credential-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    border-bottom: 1px solid #ddd;
-  }
+.add-button {
+  background-color: #4caf50;
+  color: white;
+  padding: 10px 20px;
+  margin: 10px;
+  border: none;
+  cursor: pointer;
+}
 
-  .list-content {
-    flex: 1;
-  }
+.credential-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
 
-  .list-actions {
-    display: flex;
-    gap: 8px;
-  }
+.list-content {
+  flex: 1;
+}
 
-  .edit-button,
-  .delete-button {
-    background-color: #f1f1f1;
-    color: black;
-    padding: 8px 12px;
-    cursor: pointer;
-    border: 1px solid #ccc;
-  }
+.list-actions {
+  display: flex;
+  gap: 8px;
+}
 
-  .delete-button {
-    background-color: #f44336;
-    color: #f44336;
-    border: none;
-  }
-  .form-container {
-    display: flex;
-    justify-content: space-between;
-    width: 100%; /* Adjust width to be flexible */
-    flex-direction: column;
-    align-items: flex-start;
-    width: auto;
-    height: auto;
-    min-width: auto;
-    min-height: auto;
-  }
+.edit-button,
+.delete-button {
+  background-color: #f1f1f1;
+  color: black;
+  padding: 8px 12px;
+  cursor: pointer;
+  border: 1px solid #ccc;
+}
 
-  .form-container li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: auto;
-    min-height: auto;
-    padding: 10px;
-    box-sizing: border-box;
-    border-bottom: 1px solid #ccc;
-  }
+.delete-button {
+  background-color: #f44336;
+  color: #f44336;
+  border: none;
+}
+.form-container {
+  display: flex;
+  justify-content: space-between;
+  width: 100%; /* Adjust width to be flexible */
+  flex-direction: column;
+  align-items: flex-start;
+  width: auto;
+  height: auto;
+  min-width: auto;
+  min-height: auto;
+}
 
-  /* You can adjust the width % based on your layout requirements */
-  .form-container div {
-    width: 30%;
-  }
+.form-container li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: auto;
+  min-height: auto;
+  padding: 10px;
+  box-sizing: border-box;
+  border-bottom: 1px solid #ccc;
+}
 
-  /* For button groups */
-  .form-container .editDeleteGroup,
-  .form-container .otherActionsGroup {
-    display: flex;
-    gap: 10px; /* Add some spacing between buttons */
-  }
+/* You can adjust the width % based on your layout requirements */
+.form-container div {
+  width: 30%;
+}
 
-  /* For name container */
-  .form-container .nameContainer {
-    font-weight: bold;
-    text-shadow: 1px 1px gray;
-  }
+/* For button groups */
+.form-container .editDeleteGroup,
+.form-container .otherActionsGroup {
+  display: flex;
+  gap: 10px; /* Add some spacing between buttons */
+}
+
+/* For name container */
+.form-container .nameContainer {
+  font-weight: bold;
+  text-shadow: 1px 1px gray;
+}

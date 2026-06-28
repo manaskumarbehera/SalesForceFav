@@ -13,8 +13,9 @@ login credentials and automates signing in. From the toolbar popup the user can:
 - Tag each credential with a **favicon color** so logged-in tabs are visually distinct.
 - **Edit** and **delete** saved credentials.
 
-There is no build step, no framework, and no backend. It is plain HTML/CSS/JS loaded
-directly by Chrome.
+The shipped extension has no runtime build step, framework, or backend — it is plain
+HTML/CSS/JS loaded directly by the browser. npm is used only for dev tooling
+(lint/format/test) and for zipping store packages.
 
 ## Repository layout
 
@@ -23,14 +24,20 @@ manifest.json        # MV3 manifest: name, version, permissions, popup entry
 popup/
   popup.html         # Popup markup — credential list + form container
   popup.css          # Popup styling
-  popup.js           # All logic: storage, UI rendering, login automation
+  popup.js           # DOM, chrome.* and login automation (side effects)
+  credentials.js     # Pure, unit-tested credential logic (exposed as SFFav)
+tests/               # Jest unit tests for credentials.js
+scripts/build.mjs    # Stages runtime files into dist/
+build.sh             # Builds + zips Chrome/Edge store packages
+.github/workflows/   # CI: lint + test + build
 Privacy Policy.md    # Privacy policy (no data leaves the browser)
 README.md            # Product overview + roadmap
 AGENT.md             # This file
 ```
 
 `popup/popup.js` is the heart of the extension. It is heavily commented with numbered
-steps (`// 1.`, `// 2.`, …); keep that numbering coherent when you edit.
+steps (`// 1.`, `// 2.`, …); keep that numbering coherent when you edit. Pure,
+testable helpers live in `popup/credentials.js`.
 
 ## How it works (key flows)
 
@@ -47,18 +54,37 @@ steps (`// 1.`, `// 2.`, …); keep that numbering coherent when you edit.
 
 ## Conventions
 
-- **No build tooling.** Do not introduce npm, bundlers, or transpilers unless explicitly
-  asked. Edit the source files directly.
+- **No bundler at runtime.** The shipped extension is plain scripts with zero runtime
+  dependencies — do not introduce a bundler or transpiler for the extension itself.
+  (npm is used only for dev tooling: lint, format, test, packaging.)
 - **Manifest V3 only.** Use `chrome.*` MV3 APIs (`scripting`, `tabs`, `windows`,
   `storage`). Do not reintroduce MV2 patterns (e.g. background pages, `tabs.executeScript`).
-- **Vanilla JS / DOM.** No external libraries are bundled. Keep dependencies at zero.
+- **Vanilla JS / DOM.** No external libraries are bundled. Keep runtime dependencies at zero.
 - Match the existing style: `const`/arrow functions, two-space indent, numbered
-  step comments.
-- Keep the popup self-contained — all logic lives in `popup/`.
+  step comments. Run `npm run format` (Prettier) and `npm run lint` (ESLint) before committing.
+- Keep the popup self-contained — all runtime logic lives in `popup/`.
+- **Pure logic goes in `popup/credentials.js`** (exposed as `SFFav`), which is unit-tested.
+  DOM/`chrome.*`/storage side effects stay in `popup/popup.js`.
+- **Injected functions must be self-contained.** Anything passed to
+  `chrome.scripting.executeScript({function})` runs in the _page_ context — it cannot
+  reference `chrome.*`, the popup scope, or `SFFav`. Pass everything in via `args`.
 
 ## Testing & verifying changes
 
-There is no automated test suite. To verify a change, load the unpacked extension:
+### Automated (pure logic)
+
+```bash
+npm install        # one-time
+npm test           # jest — unit tests for popup/credentials.js
+npm run lint       # eslint
+npm run validate   # lint + test (what CI runs)
+```
+
+Tests live in `tests/` and cover the pure logic in `popup/credentials.js`
+(URL resolution, validation, unique-name checks, immutable CRUD, hex→RGB).
+There is no headless-browser test — DOM and `chrome.*` flows are verified manually.
+
+### Manual (popup + login automation)
 
 1. Open `chrome://extensions/`.
 2. Enable **Developer mode**.
@@ -69,6 +95,17 @@ There is no automated test suite. To verify a change, load the unpacked extensio
 
 Use the popup DevTools (right-click the popup → Inspect) and the target tab's console
 to read `console.log` / `console.error` output while debugging.
+See the `load-extension` skill (`.claude/skills/load-extension/`) for a full checklist.
+
+### Building store packages
+
+```bash
+./build.sh            # build + zip for chrome and edge → build/<store>/
+./build.sh chrome     # one target only
+```
+
+One MV3 build serves both Chrome and Edge; `build.sh` only changes the ZIP filename
+per store. `scripts/build.mjs` stages runtime files into `dist/`.
 
 ## Things to be careful about
 
