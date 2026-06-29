@@ -84,6 +84,21 @@ module.exports = [
     },
   },
   {
+    // Background service worker. Runs in the SW context (chrome.*, self,
+    // importScripts) but also contains a function injected into the page
+    // (document/setTimeout), so include the browser globals too.
+    files: ["background.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "script",
+      globals: { ...browserGlobals, importScripts: "readonly" },
+    },
+    rules: {
+      "no-unused-vars": ["warn", { args: "none", caughtErrors: "none" }],
+      "no-empty": ["error", { allowEmptyCatch: true }],
+    },
+  },
+  {
     // Universal shared module — runs in the browser and in Node (jest).
     files: ["popup/credentials.js"],
     languageOptions: {

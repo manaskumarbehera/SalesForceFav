@@ -11,7 +11,7 @@ const root = path.resolve(__dirname, "..");
 const distDir = path.join(root, "dist");
 
 // Flat runtime files copied verbatim into dist/.
-const requiredFiles = ["manifest.json"];
+const requiredFiles = ["manifest.json", "background.js"];
 
 // Directories copied recursively into dist/.
 const requiredDirs = ["popup", "icons"];
