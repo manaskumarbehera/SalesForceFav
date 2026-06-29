@@ -97,12 +97,17 @@ async function main() {
   await new Promise((r) => server.listen(PORT, "127.0.0.1", r));
   log(`mock login server on https://127.0.0.1:${PORT}`);
 
-  // Current Chrome blocks the old --load-extension CLI switch, so load the unpacked
-  // extension via the CDP Extensions domain (needs --enable-unsafe-extension-debugging).
+  // The way to load an unpacked extension changed across Chrome versions:
+  //   - older Chrome (≤ ~136): the --load-extension CLI switch works
+  //   - newer Chrome (≥ ~137): that switch is blocked; use the CDP
+  //     Extensions.loadUnpacked command (needs --enable-unsafe-extension-debugging)
+  // Pass the flags for both and feature-detect at runtime so the test is portable.
   const browser = await puppeteer.launch({
     executablePath: resolveChrome(),
     headless: process.env.PUPPETEER_HEADFUL ? false : "new",
     args: [
+      `--disable-extensions-except=${DIST}`,
+      `--load-extension=${DIST}`,
       "--enable-unsafe-extension-debugging",
       "--remote-debugging-pipe",
       `--host-resolver-rules=MAP login.salesforce.com 127.0.0.1:${PORT},MAP test.salesforce.com 127.0.0.1:${PORT}`,
@@ -113,21 +118,40 @@ async function main() {
   });
 
   try {
-    // 3. Load the unpacked extension and get its id.
-    log("loading the unpacked extension via CDP ...");
+    // 3. Load the unpacked extension and get its id (new CDP path, else classic).
     const client = await browser.target().createCDPSession();
-    const { id: extId } = await client.send("Extensions.loadUnpacked", { path: DIST });
-    log(`extension id: ${extId}`);
+    let extId;
+    try {
+      const r = await client.send("Extensions.loadUnpacked", { path: DIST });
+      extId = r.id;
+      log(`loaded via CDP Extensions.loadUnpacked; id ${extId}`);
+    } catch {
+      log("Extensions.loadUnpacked unavailable; using --load-extension + service worker");
+      const sw = await browser.waitForTarget(
+        (t) => t.type() === "service_worker" && t.url().includes("background.js"),
+        { timeout: 15000 }
+      );
+      extId = new URL(sw.url()).host;
+      log(`found service worker; id ${extId}`);
+    }
 
-    // 4. Open the popup. Current Chrome blocks page.goto() to a chrome-extension
-    //    page, but the CDP Target.createTarget command opens it fine.
+    // 4. Open the popup. Newer Chrome blocks page.goto() to a chrome-extension URL
+    //    (use CDP Target.createTarget); older Chrome is fine with goto. Try both.
     const popupUrl = `chrome-extension://${extId}/popup/popup.html`;
-    await client.send("Target.createTarget", { url: popupUrl });
-    const popupTarget = await browser.waitForTarget((t) => t.url() === popupUrl, {
-      timeout: 10000,
-    });
-    const popup = await popupTarget.page();
-    await popup.waitForSelector("#addBtn", { timeout: 10000 }); // popup HTML is loaded
+    let popup;
+    try {
+      await client.send("Target.createTarget", { url: popupUrl });
+      const popupTarget = await browser.waitForTarget((t) => t.url() === popupUrl, {
+        timeout: 8000,
+      });
+      popup = await popupTarget.page();
+      await popup.waitForSelector("#addBtn", { timeout: 6000 });
+    } catch {
+      log("createTarget popup path failed; falling back to page.goto");
+      popup = await browser.newPage();
+      await popup.goto(popupUrl, { waitUntil: "domcontentloaded" });
+      await popup.waitForSelector("#addBtn", { timeout: 8000 });
+    }
 
     // Seed a Production credential, then reload (in-page) so the app renders it.
     await popup.evaluate(
