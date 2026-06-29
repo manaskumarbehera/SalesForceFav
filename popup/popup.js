@@ -121,6 +121,14 @@ function wireLock() {
   if (bioUnlock) bioUnlock.addEventListener("click", biometricUnlock);
   const lockReset = $("lockReset");
   if (lockReset) lockReset.addEventListener("click", resetVault);
+  const lockOpenTab = $("lockOpenTab");
+  if (lockOpenTab) {
+    lockOpenTab.addEventListener("click", () => {
+      // WebAuthn (Touch ID / Windows Hello) is unreliable in the action popup,
+      // which closes when the OS prompt steals focus. A full tab keeps focus.
+      chrome.tabs.create({ url: chrome.runtime.getURL("popup/popup.html") });
+    });
+  }
   const bioToggle = $("bioToggle");
   if (bioToggle) {
     bioToggle.addEventListener("click", () =>
@@ -163,6 +171,8 @@ function showLock(mode) {
   // Biometric is the primary action when enrolled; otherwise the passphrase button is.
   $("lockBtn").classList.toggle("btn-primary", !bioOn);
   if ($("lockReset")) $("lockReset").hidden = mode !== "unlock";
+  // The "open in a tab" workaround only matters when biometric is enrolled.
+  if ($("lockOpenTab")) $("lockOpenTab").hidden = !bioOn;
 
   $("lockError").hidden = true;
   $("lockPass").value = "";
