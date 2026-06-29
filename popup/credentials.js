@@ -119,9 +119,130 @@
     return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
   }
 
+  // Case-insensitive filter across name, environment, username, and SSO URL.
+  function filterCredentials(credentials, query) {
+    const q = normalizeName(query);
+    const list = Array.isArray(credentials) ? credentials : [];
+    if (!q) return list.slice();
+    return list.filter((c) => {
+      const hay = [c.credentialName, c.environment, c.username, c.ssourl]
+        .map((v) => String(v || "").toLowerCase())
+        .join(" ");
+      return hay.includes(q);
+    });
+  }
+
+  // Stable display order: pinned first, then most-recently-used, then by name.
+  // Returns a NEW array; never mutates the input.
+  function sortCredentials(credentials) {
+    const list = Array.isArray(credentials) ? credentials.slice() : [];
+    return list.sort((a, b) => {
+      const pa = a.pinned ? 1 : 0;
+      const pb = b.pinned ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      const la = Number(a.lastUsedAt) || 0;
+      const lb = Number(b.lastUsedAt) || 0;
+      if (la !== lb) return lb - la;
+      return normalizeName(a.credentialName).localeCompare(normalizeName(b.credentialName));
+    });
+  }
+
+  // Immutable toggle of the `pinned` flag at an index.
+  function togglePinAt(credentials, index) {
+    const list = Array.isArray(credentials) ? credentials.slice() : [];
+    if (index >= 0 && index < list.length) {
+      list[index] = { ...list[index], pinned: !list[index].pinned };
+    }
+    return list;
+  }
+
+  // Immutable stamp of `lastUsedAt` at an index (timestamp passed in — this
+  // module stays free of Date.now() so it remains deterministic and testable).
+  function markUsedAt(credentials, index, timestamp) {
+    const list = Array.isArray(credentials) ? credentials.slice() : [];
+    if (index >= 0 && index < list.length) {
+      list[index] = { ...list[index], lastUsedAt: timestamp };
+    }
+    return list;
+  }
+
+  const EXPORT_APP = "SalesForceFav";
+  const EXPORT_FORMAT = 1;
+
+  // Build the backup payload (timestamp passed in for determinism).
+  function buildExport(credentials, timestamp) {
+    return {
+      app: EXPORT_APP,
+      format: EXPORT_FORMAT,
+      exportedAt: timestamp || null,
+      credentials: Array.isArray(credentials) ? credentials : [],
+    };
+  }
+
+  function serializeExport(credentials, timestamp) {
+    return JSON.stringify(buildExport(credentials, timestamp), null, 2);
+  }
+
+  // Ensure an imported record has the fields the app expects (defaults for
+  // files written by older versions that lack pinned/lastUsedAt).
+  function normalizeImported(raw) {
+    return {
+      credentialName: String(raw.credentialName || "").trim(),
+      environment: raw.environment || "",
+      ssourl: raw.ssourl || "",
+      username: raw.username || "",
+      password: raw.password || "",
+      faviconColor: raw.faviconColor || "#2563eb",
+      pinned: raw.pinned === true,
+      lastUsedAt: typeof raw.lastUsedAt === "number" ? raw.lastUsedAt : null,
+    };
+  }
+
+  // Parse a backup file. Accepts either a bare array of credentials or a
+  // { credentials: [...] } envelope. Returns { credentials, error }.
+  function parseImport(jsonString) {
+    let data;
+    try {
+      data = JSON.parse(jsonString);
+    } catch {
+      return { credentials: [], error: "File is not valid JSON." };
+    }
+    const arr = Array.isArray(data) ? data : data && data.credentials;
+    if (!Array.isArray(arr)) {
+      return { credentials: [], error: "No credentials found in this file." };
+    }
+    const credentials = arr
+      .filter((c) => c && typeof c === "object")
+      .map(normalizeImported)
+      .filter((c) => c.credentialName);
+    if (credentials.length === 0) {
+      return { credentials: [], error: "No valid credentials found in this file." };
+    }
+    return { credentials, error: null };
+  }
+
+  // Merge imported credentials into the existing list, skipping name duplicates
+  // (case-insensitive). Returns { merged, added, skipped } — never mutates input.
+  function mergeImport(existing, imported) {
+    const merged = Array.isArray(existing) ? existing.slice() : [];
+    let added = 0;
+    let skipped = 0;
+    for (const cred of imported || []) {
+      if (findDuplicateIndex(merged, cred.credentialName, null) !== -1) {
+        skipped += 1;
+      } else {
+        merged.push(cred);
+        added += 1;
+      }
+    }
+    return { merged, added, skipped };
+  }
+
   const api = {
     SF_LOGIN_URLS,
     ENVIRONMENTS,
+    EXPORT_APP,
+    EXPORT_FORMAT,
     resolveSalesforceUrl,
     normalizeName,
     findDuplicateIndex,
@@ -130,6 +251,15 @@
     upsertCredential,
     removeCredential,
     hexToRgb,
+    filterCredentials,
+    sortCredentials,
+    togglePinAt,
+    markUsedAt,
+    buildExport,
+    serializeExport,
+    normalizeImported,
+    parseImport,
+    mergeImport,
   };
 
   // Expose on the global for the popup runtime.

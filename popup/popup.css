@@ -1,126 +1,440 @@
-/* Existing styles */
-body,
-h1,
-h2,
-h3,
-ul,
-p {
-  margin: 0;
-  padding: 0;
+/* ─────────────────────────────────────────────────────────────────────────
+   SalesForceFav popup — restrained, professional styling.
+   Theming is driven by [data-theme] on <html>.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg: #fbfbfc;
+  --surface: #ffffff;
+  --surface-2: #f5f6f8;
+  --text: #1c2024;
+  --text-muted: #6b7280;
+  --border: #e7e8ec;
+  --border-strong: #d6d8df;
+  --accent: #3a5ccc;
+  --accent-soft: rgba(58, 92, 204, 0.1);
+  --on-accent: #ffffff;
+  --danger: #c0392b;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(20, 25, 40, 0.06);
+}
+
+html[data-theme="dark"] {
+  --bg: #15171c;
+  --surface: #1c1f26;
+  --surface-2: #23262f;
+  --text: #e6e8ec;
+  --text-muted: #9197a3;
+  --border: #2b2f39;
+  --border-strong: #3a3f4b;
+  --accent: #7d97f4;
+  --accent-soft: rgba(125, 151, 244, 0.14);
+  --on-accent: #15171c;
+  --danger: #e06c5b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background-color: #f7f7f7;
-  padding: 15px;
+  margin: 0;
+  width: 360px;
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
 }
 
-.container {
-  max-width: 300px;
-  margin: auto;
-  background-color: #fff;
-  padding: 10px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* Inline form validation errors */
-.form-errors {
-  background-color: #fdecea;
-  color: #b71c1c;
-  border: 1px solid #f5c6cb;
-  border-radius: 4px;
-  padding: 8px;
-  margin-bottom: 8px;
-  font-size: 0.85em;
-}
-
-/* New or modified styles */
-.icon-button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 1.1em;
-  color: #333;
-  padding: 5px;
-}
-
-.add-button {
-  background-color: #4caf50;
-  color: white;
-  padding: 10px 20px;
-  margin: 10px;
-  border: none;
-  cursor: pointer;
-}
-
-.credential-list li {
+.app {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  max-height: 580px;
+}
+
+/* ── header ── */
+.app-header {
+  display: flex;
   align-items: center;
-  padding: 10px;
-  border-bottom: 1px solid #ddd;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+.brand-text h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+}
+.brand-sub {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
-.list-content {
-  flex: 1;
-}
-
-.list-actions {
+/* ── toolbar ── */
+.toolbar {
   display: flex;
   gap: 8px;
+  padding: 12px 16px;
+  align-items: center;
+}
+.search-wrap {
+  position: relative;
+  flex: 1;
+}
+.search-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  color: var(--text-muted);
+}
+.search-icon svg {
+  width: 14px;
+  height: 14px;
+}
+#searchInput {
+  width: 100%;
+  padding: 7px 10px 7px 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+#searchInput::placeholder {
+  color: var(--text-muted);
+}
+#searchInput:focus {
+  border-color: var(--accent);
 }
 
-.edit-button,
-.delete-button {
-  background-color: #f1f1f1;
-  color: black;
-  padding: 8px 12px;
+/* ── buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px;
+  width: 34px;
+  height: 34px;
   cursor: pointer;
-  border: 1px solid #ccc;
+  transition: background 0.12s ease;
+}
+.btn:hover {
+  background: var(--surface-2);
+}
+.btn svg {
+  width: 16px;
+  height: 16px;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+.btn-primary:hover {
+  background: var(--accent);
+  filter: brightness(0.96);
+}
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 7px;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.icon-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.icon-btn.danger:hover {
+  color: var(--danger);
+}
+.icon-btn.on {
+  color: var(--accent);
 }
 
-.delete-button {
-  background-color: #f44336;
-  color: #f44336;
-  border: none;
-}
-.form-container {
-  display: flex;
-  justify-content: space-between;
-  width: 100%; /* Adjust width to be flexible */
-  flex-direction: column;
-  align-items: flex-start;
+/* ── form action buttons (text) ── */
+.form-actions .btn {
   width: auto;
   height: auto;
-  min-width: auto;
-  min-height: auto;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
-.form-container li {
+/* ── credential list ── */
+.cred-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 12px;
+  overflow-y: auto;
+}
+.cred-card {
+  position: relative;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  width: auto;
-  min-height: auto;
-  padding: 10px;
-  box-sizing: border-box;
-  border-bottom: 1px solid #ccc;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 11px 10px 11px 16px;
+  margin-bottom: 7px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
-
-/* You can adjust the width % based on your layout requirements */
-.form-container div {
-  width: 30%;
+.cred-rail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
 }
-
-/* For button groups */
-.form-container .editDeleteGroup,
-.form-container .otherActionsGroup {
+.cred-body {
+  flex: 1;
+  min-width: 0;
+}
+.cred-name-row {
   display: flex;
-  gap: 10px; /* Add some spacing between buttons */
+  align-items: center;
+  gap: 6px;
+}
+.cred-pin {
+  display: inline-flex;
+  color: var(--accent);
+}
+.cred-pin svg {
+  width: 12px;
+  height: 12px;
+}
+.cred-name {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cred-meta {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.cred-badge {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+/* Soft, muted tinted badges (not loud fills). */
+.env-sandbox {
+  color: #9a6b00;
+  background: rgba(176, 124, 0, 0.12);
+}
+.env-production {
+  color: #1f7a4d;
+  background: rgba(31, 122, 77, 0.12);
+}
+.env-sso {
+  color: #5b53b5;
+  background: rgba(91, 83, 181, 0.12);
+}
+html[data-theme="dark"] .env-sandbox {
+  color: #e0b257;
+}
+html[data-theme="dark"] .env-production {
+  color: #6cc79a;
+}
+html[data-theme="dark"] .env-sso {
+  color: #a9a2ef;
+}
+.cred-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0;
+  max-width: 120px;
 }
 
-/* For name container */
-.form-container .nameContainer {
-  font-weight: bold;
-  text-shadow: 1px 1px gray;
+/* ── form panel ── */
+.form-panel {
+  margin: 0 12px 8px;
+}
+.cred-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px 14px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+.form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.form-head strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.cred-form label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin: 9px 0 3px;
+}
+.cred-form input[type="text"],
+.cred-form input[type="url"],
+.cred-form input[type="password"],
+.cred-form select {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+.cred-form input:focus,
+.cred-form select:focus {
+  border-color: var(--accent);
+}
+.pw-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.pw-wrap input {
+  flex: 1;
+}
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+.form-row label {
+  margin: 0;
+}
+.form-row input[type="color"] {
+  width: 36px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+.pin-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px !important;
+  color: var(--text) !important;
+  cursor: pointer;
+}
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.form-errors {
+  background: rgba(192, 57, 43, 0.08);
+  color: var(--danger);
+  border: 1px solid rgba(192, 57, 43, 0.25);
+  border-radius: 7px;
+  padding: 8px 10px;
+  margin: 6px 0 2px;
+  font-size: 12px;
+}
+
+/* ── empty state ── */
+.empty {
+  text-align: center;
+  padding: 44px 28px 52px;
+  color: var(--text-muted);
+}
+.empty-icon {
+  display: inline-flex;
+  color: var(--border-strong);
+}
+.empty-icon svg {
+  width: 34px;
+  height: 34px;
+}
+.empty-title {
+  font-weight: 600;
+  color: var(--text);
+  margin: 10px 0 4px;
+  font-size: 13px;
+}
+.empty-sub {
+  font-size: 12px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── toast ── */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--text);
+  color: var(--bg);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }

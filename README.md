@@ -10,16 +10,23 @@ See [Privacy Policy](./Privacy%20Policy.md).
 ## Features
 
 - **Credential manager** — save, edit, and delete named Salesforce logins from a
-  simple popup.
+  modern, card-based popup.
 - **Multiple environments** — Sandbox (`test.salesforce.com`), Production
-  (`login.salesforce.com`), or a custom **SSO** URL.
-- **One-click login** — open and auto-sign-in to Salesforce in a:
-  - new **Tab**
-  - new **Window**
-  - **Incognito** window
+  (`login.salesforce.com`), or a custom **SSO** URL, each with a color-coded badge.
+- **One-click login** — open and auto-sign-in to Salesforce in a new **Tab**,
+  new **Window**, or **Incognito** window.
 - **Auto-fill** — fills the username/password and clicks login for you.
+- **Instant search** — filter orgs as you type by name, environment, username, or URL
+  (press <kbd>/</kbd> to jump to the search box).
+- **Pin & smart sort** — pin favorites to the top; the rest sort by most-recently used.
+- **Copy to clipboard** — one-click copy of a credential's username or password.
+- **Backup & Restore** — export all credentials to a JSON file and import them back,
+  with validation and automatic de-duplication.
+- **Light / Dark theme** — toggle and it's remembered.
 - **Color-coded favicons** — assign each credential a color so logged-in tabs are
   instantly recognizable.
+- **Custom icon** — generated procedurally (`scripts/generate-icons.mjs`); no binary
+  design assets to maintain.
 
 ## Installation (load unpacked)
 
@@ -41,11 +48,21 @@ To use **Incognito** logins, open the extension's **Details** page and enable
    - **SSO URL** (SSO only) **or** **Username + Password**.
    - **Favicon Color** — a color to tag logged-in tabs.
 3. Save. Your credential appears in the list.
-4. For any saved credential, click:
-   - **➜ Tab** — log in to a new tab
-   - **🗗 Window** — log in to a new window
-   - **🥸 Incognito** — log in to an incognito window
-   - **✎ Edit** / **✖ Delete** — manage the credential
+4. For any saved credential, use the card actions (clean line icons):
+   - **Tab / Window / Incognito** — log in that way
+   - **Copy username / Copy password** — to the clipboard
+   - **Pin** — keep it at the top of the list
+   - **Edit / Delete** — manage the credential
+
+### Backup & Restore
+
+- Click **↓** to **back up** all credentials to a `salesforcefav-backup-<date>.json`
+  file (saved via your browser's normal download).
+- Click **↑** to **restore** from such a file. Existing names are kept; duplicates in
+  the file are skipped, and you're told how many were imported vs. skipped.
+
+> ⚠️ A backup file contains your passwords in **plain text**. Store it somewhere safe
+> (an encrypted disk or password manager), and delete stray copies.
 
 ## How it works
 
@@ -60,15 +77,17 @@ To use **Incognito** logins, open the extension's **Details** page and enable
 ## Project structure
 
 ```
-manifest.json        # MV3 manifest (permissions, popup entry)
+manifest.json             # MV3 manifest (permissions, icons, popup entry)
+icons/                    # Generated PNG icons (16/32/48/128)
 popup/
-  popup.html         # Popup UI
-  popup.css          # Popup styles
-  popup.js           # DOM, chrome.* and login automation (side effects)
-  credentials.js     # Pure, unit-tested credential logic (SFFav)
-tests/               # Jest unit tests
-scripts/build.mjs    # Stages runtime files into dist/
-build.sh             # Builds + zips Chrome/Edge packages
+  popup.html              # Popup UI
+  popup.css               # Popup styles (light/dark themes)
+  popup.js                # DOM, chrome.* and login automation (side effects)
+  credentials.js          # Pure, unit-tested logic (SFFav): validate/search/sort/import
+tests/                    # Jest unit tests
+scripts/build.mjs         # Stages runtime files into dist/
+scripts/generate-icons.mjs# Regenerates the PNG icons (no external deps)
+build.sh                  # Builds + zips Chrome/Edge packages
 ```
 
 ## Development
@@ -93,30 +112,52 @@ and a build on every push. For contributor and AI-agent guidance see
 
 ## Roadmap
 
-Planned and in-progress enhancements:
+### Shipped
 
-### Add Credential improvements
+- [x] Form validation, unique-name enforcement, and inline error messages.
+- [x] Instant search across name / environment / username / URL.
+- [x] Backup (export) and Restore (import) with validation + de-duplication.
+- [x] Pin favorites and most-recently-used sorting.
+- [x] Copy username / password to clipboard.
+- [x] Light / dark theme.
+- [x] Extension icon + color-coded environment badges.
+- [x] Automated tests (Jest) and Chrome/Edge build.
 
-- [x] Validate all input fields (environment, username, password, SSO URL).
-- [x] Enforce **unique credential names**.
-- [x] Show inline error feedback messages (no blocking `alert`).
-- [ ] Make the add (**+**) icon dynamic — switch to a cancel (**×**) icon when the form
-      is open, using an `action-icon` class instead of a hardcoded symbol.
-- [ ] Replace the hardcoded save (💾) / cancel (🚫) controls with icon-class buttons.
+### Missing features common to this kind of extension
 
-### Search
+Ideas that would make SalesForceFav stand out further — roughly highest-impact first:
 
-- Real-time, case-insensitive filtering of saved credentials.
-- Support partial matches across name, environment, and other metadata.
+**Security**
 
-### Import / Export
+- [ ] **Encrypt credentials at rest** behind an optional master password (currently
+      plaintext in `localStorage`).
+- [ ] **Encrypted backups** (password-protected export).
+- [ ] **TOTP / 2FA** code generation and autofill.
 
-- Export all credentials to a JSON backup file.
-- Import credentials from a JSON file, with error handling for bad formats and duplicates.
+**Smarter login**
 
-### Testing
+- [ ] **Session/`frontdoor.jsp` login** via OAuth or a session id, instead of typing
+      credentials into the page (more reliable, survives login-form changes).
+- [ ] **"Login As"** another user within an org (Setup → Users).
+- [ ] **Deep links** — jump straight to Setup, Object Manager, Flows, or a saved path.
+- [ ] **Detect the current org** in the active tab and highlight the matching credential.
 
-- Investigate and add automated tests for the extension.
+**Organization & UX**
+
+- [ ] **Tags / groups / folders** for managing many orgs.
+- [ ] **Drag-to-reorder** and bulk select/delete.
+- [ ] **Per-credential notes** and a custom My Domain / login URL.
+- [ ] **Keyboard command** to open the popup and quick-launch by number.
+- [ ] Open an org in a specific **Chrome profile / container**.
+
+**Sync & reliability**
+
+- [ ] **`chrome.storage.sync`** to sync orgs across devices.
+- [ ] **Session health check** — show whether a saved org still has a live session.
+
+### Known cleanups
+
+- [ ] Make the add (**+**) control swap to a cancel (**×**) state while the form is open.
 
 ## Privacy
 

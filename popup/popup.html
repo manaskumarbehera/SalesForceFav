@@ -2,18 +2,63 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Credential Manager</title>
+    <title>SalesForceFav</title>
     <link rel="stylesheet" href="popup.css" />
     <script defer src="credentials.js"></script>
     <script defer src="popup.js"></script>
   </head>
   <body>
-    <div class="container">
-      <button id="newCredentialButton">➕</button>
-      <div id="formContainer" class="form-container">
-        <!-- Form will be added here -->
+    <div class="app">
+      <header class="app-header">
+        <div class="brand">
+          <img class="brand-logo" src="../icons/icon-48.png" alt="" />
+          <div class="brand-text">
+            <h1>SalesForceFav</h1>
+            <span class="brand-sub" id="countLabel"></span>
+          </div>
+        </div>
+        <button
+          id="themeToggle"
+          class="icon-btn"
+          title="Toggle theme"
+          aria-label="Toggle theme"
+        ></button>
+      </header>
+
+      <div class="toolbar">
+        <div class="search-wrap">
+          <span class="search-icon" id="searchIcon" aria-hidden="true"></span>
+          <input id="searchInput" type="search" placeholder="Search orgs" autocomplete="off" />
+        </div>
+        <button id="addBtn" class="btn btn-primary" title="Add org" aria-label="Add org"></button>
+        <button
+          id="importBtn"
+          class="btn"
+          title="Restore from backup"
+          aria-label="Restore from backup"
+        ></button>
+        <button
+          id="exportBtn"
+          class="btn"
+          title="Back up to file"
+          aria-label="Back up to file"
+        ></button>
+        <input id="importFile" type="file" accept="application/json,.json" hidden />
       </div>
-      <ul id="credentialList" class="credential-list"></ul>
+
+      <div id="formContainer" class="form-panel" hidden></div>
+
+      <ul id="credentialList" class="cred-list"></ul>
+
+      <div id="emptyState" class="empty" hidden>
+        <div class="empty-icon" id="emptyIcon"></div>
+        <p class="empty-title">No saved orgs yet</p>
+        <p class="empty-sub" id="emptySub">
+          Add your first Salesforce login, or restore from a backup.
+        </p>
+      </div>
+
+      <div id="toast" class="toast" role="status" hidden></div>
     </div>
   </body>
 </html>

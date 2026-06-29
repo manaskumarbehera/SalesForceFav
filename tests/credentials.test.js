@@ -9,6 +9,13 @@ const {
   upsertCredential,
   removeCredential,
   hexToRgb,
+  filterCredentials,
+  sortCredentials,
+  togglePinAt,
+  markUsedAt,
+  serializeExport,
+  parseImport,
+  mergeImport,
 } = SFFav;
 
 describe("resolveSalesforceUrl", () => {
@@ -179,5 +186,113 @@ describe("hexToRgb", () => {
   test("falls back to black for malformed input", () => {
     expect(hexToRgb("xyz")).toEqual([0, 0, 0]);
     expect(hexToRgb(null)).toEqual([0, 0, 0]);
+  });
+});
+
+describe("filterCredentials", () => {
+  const creds = [
+    { credentialName: "Prod", environment: "production", username: "admin@acme.com" },
+    { credentialName: "QA Sandbox", environment: "sandbox", username: "qa@acme.com" },
+    { credentialName: "Okta", environment: "sso", ssourl: "https://acme.okta.com" },
+  ];
+
+  test("empty query returns all (a copy)", () => {
+    const out = filterCredentials(creds, "");
+    expect(out).toHaveLength(3);
+    expect(out).not.toBe(creds);
+  });
+
+  test("matches name, environment, username, and SSO URL (case-insensitive)", () => {
+    expect(filterCredentials(creds, "prod")).toHaveLength(1);
+    expect(filterCredentials(creds, "SANDBOX")).toHaveLength(1);
+    expect(filterCredentials(creds, "qa@acme")).toHaveLength(1);
+    expect(filterCredentials(creds, "okta.com")).toHaveLength(1);
+    expect(filterCredentials(creds, "acme")).toHaveLength(3);
+  });
+
+  test("no match returns empty", () => {
+    expect(filterCredentials(creds, "zzz")).toEqual([]);
+  });
+});
+
+describe("sortCredentials", () => {
+  test("pinned first, then most-recent, then name; input untouched", () => {
+    const input = [
+      { credentialName: "Beta", lastUsedAt: 100 },
+      { credentialName: "Alpha", pinned: true, lastUsedAt: 1 },
+      { credentialName: "Gamma", lastUsedAt: 200 },
+      { credentialName: "Delta" },
+    ];
+    const out = sortCredentials(input);
+    expect(out.map((c) => c.credentialName)).toEqual(["Alpha", "Gamma", "Beta", "Delta"]);
+    expect(input[0].credentialName).toBe("Beta"); // not mutated
+  });
+});
+
+describe("togglePinAt / markUsedAt", () => {
+  test("togglePinAt flips the flag immutably", () => {
+    const input = [{ credentialName: "A" }];
+    const out = togglePinAt(input, 0);
+    expect(out[0].pinned).toBe(true);
+    expect(input[0].pinned).toBeUndefined();
+  });
+
+  test("markUsedAt stamps the timestamp immutably", () => {
+    const input = [{ credentialName: "A" }];
+    const out = markUsedAt(input, 0, 1234);
+    expect(out[0].lastUsedAt).toBe(1234);
+    expect(input[0].lastUsedAt).toBeUndefined();
+  });
+});
+
+describe("serializeExport / parseImport round trip", () => {
+  const creds = [
+    { credentialName: "Prod", environment: "production", username: "u", password: "p" },
+  ];
+
+  test("export produces a versioned envelope", () => {
+    const json = serializeExport(creds, 999);
+    const parsed = JSON.parse(json);
+    expect(parsed.app).toBe("SalesForceFav");
+    expect(parsed.exportedAt).toBe(999);
+    expect(parsed.credentials).toHaveLength(1);
+  });
+
+  test("import reads the envelope back", () => {
+    const json = serializeExport(creds, 999);
+    const { credentials, error } = parseImport(json);
+    expect(error).toBeNull();
+    expect(credentials[0].credentialName).toBe("Prod");
+  });
+
+  test("import accepts a bare array", () => {
+    const { credentials, error } = parseImport(JSON.stringify([{ credentialName: "X" }]));
+    expect(error).toBeNull();
+    expect(credentials).toHaveLength(1);
+  });
+
+  test("import defaults missing pinned/lastUsedAt fields", () => {
+    const { credentials } = parseImport(JSON.stringify([{ credentialName: "X" }]));
+    expect(credentials[0].pinned).toBe(false);
+    expect(credentials[0].lastUsedAt).toBeNull();
+    expect(credentials[0].faviconColor).toBe("#2563eb");
+  });
+
+  test("import rejects junk and empties", () => {
+    expect(parseImport("not json").error).toMatch(/valid JSON/i);
+    expect(parseImport(JSON.stringify({ nope: 1 })).error).toMatch(/No credentials/i);
+    expect(parseImport(JSON.stringify([{}])).error).toMatch(/No valid/i);
+  });
+});
+
+describe("mergeImport", () => {
+  test("adds new, skips case-insensitive duplicates, reports counts", () => {
+    const existing = [{ credentialName: "Prod" }];
+    const imported = [{ credentialName: "prod" }, { credentialName: "Dev" }];
+    const { merged, added, skipped } = mergeImport(existing, imported);
+    expect(added).toBe(1);
+    expect(skipped).toBe(1);
+    expect(merged.map((c) => c.credentialName)).toEqual(["Prod", "Dev"]);
+    expect(existing).toHaveLength(1); // not mutated
   });
 });

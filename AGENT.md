@@ -10,6 +10,10 @@ login credentials and automates signing in. From the toolbar popup the user can:
 - Save credentials for **Sandbox**, **Production**, or **SSO** environments.
 - Launch a login in a **new tab**, **new window**, or **incognito window**.
 - Auto-fill the Salesforce username/password fields and click the login button.
+- **Search** orgs, **pin** favorites (most-recently-used sorting), and **copy**
+  username/password to the clipboard.
+- **Back up / restore** all credentials as a JSON file (validated + de-duplicated).
+- Toggle a **light / dark** theme (persisted).
 - Tag each credential with a **favicon color** so logged-in tabs are visually distinct.
 - **Edit** and **delete** saved credentials.
 
@@ -20,19 +24,21 @@ HTML/CSS/JS loaded directly by the browser. npm is used only for dev tooling
 ## Repository layout
 
 ```
-manifest.json        # MV3 manifest: name, version, permissions, popup entry
+manifest.json             # MV3 manifest: name, version, permissions, icons, popup
+icons/                    # Generated PNG icons (16/32/48/128)
 popup/
-  popup.html         # Popup markup — credential list + form container
-  popup.css          # Popup styling
-  popup.js           # DOM, chrome.* and login automation (side effects)
-  credentials.js     # Pure, unit-tested credential logic (exposed as SFFav)
-tests/               # Jest unit tests for credentials.js
-scripts/build.mjs    # Stages runtime files into dist/
-build.sh             # Builds + zips Chrome/Edge store packages
-.github/workflows/   # CI: lint + test + build
-Privacy Policy.md    # Privacy policy (no data leaves the browser)
-README.md            # Product overview + roadmap
-AGENT.md             # This file
+  popup.html              # Popup markup — header, toolbar, list, form container
+  popup.css               # Popup styling (light/dark via [data-theme])
+  popup.js                # DOM, chrome.* and login automation (side effects)
+  credentials.js          # Pure, unit-tested logic (SFFav): validate/search/sort/import
+tests/                    # Jest unit tests for credentials.js
+scripts/build.mjs         # Stages runtime files into dist/
+scripts/generate-icons.mjs# Regenerates icons/ PNGs (zlib, no deps)
+build.sh                  # Builds + zips Chrome/Edge store packages
+.github/workflows/        # CI: lint + test + build
+Privacy Policy.md         # Privacy policy (no data leaves the browser)
+README.md                 # Product overview + roadmap
+AGENT.md                  # This file
 ```
 
 `popup/popup.js` is the heart of the extension. It is heavily commented with numbered
@@ -42,8 +48,15 @@ testable helpers live in `popup/credentials.js`.
 ## How it works (key flows)
 
 - **Storage:** credentials are persisted in `localStorage` under the `"credentials"`
-  key as a JSON array. Each entry is
-  `{ credentialName, environment, ssourl, username, password, faviconColor }`.
+  key as a JSON array. Each entry has `credentialName`, `environment`, `ssourl`,
+  `username`, `password`, `faviconColor`, `pinned`, and `lastUsedAt`. Theme is stored
+  under `"sffav-theme"`.
+- **Rendering:** the popup keeps an in-memory `state` and re-renders the list through
+  `SFFav.filterCredentials` → `SFFav.sortCredentials`. Credential-derived strings are
+  written with `textContent` only (never `innerHTML`) — an imported backup file is
+  untrusted input, so this prevents markup injection in the privileged popup.
+- **Backup/restore:** export builds a versioned JSON envelope; import parses + merges,
+  skipping name duplicates. All of this is pure logic in `credentials.js`.
 - **Environment → URL:** `sandbox` → `https://test.salesforce.com/`,
   `production` → `https://login.salesforce.com/`, `sso` → the user's `ssourl`.
 - **Login automation:** the extension opens the chosen URL, waits for the tab to
@@ -81,8 +94,11 @@ npm run validate   # lint + test (what CI runs)
 ```
 
 Tests live in `tests/` and cover the pure logic in `popup/credentials.js`
-(URL resolution, validation, unique-name checks, immutable CRUD, hex→RGB).
-There is no headless-browser test — DOM and `chrome.*` flows are verified manually.
+(URL resolution, validation, unique-name checks, immutable CRUD, hex→RGB, search,
+sort, and backup import/export/merge). There is no headless-browser test — the popup's
+DOM rendering, search, theme, and form can be spot-checked by serving the repo
+(`python3 -m http.server`) and opening `popup/popup.html`; the `chrome.*` login/launch
+path is verified by loading the unpacked extension manually.
 
 ### Manual (popup + login automation)
 
