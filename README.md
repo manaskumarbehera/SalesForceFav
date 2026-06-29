@@ -28,6 +28,10 @@ See [Privacy Policy](./Privacy%20Policy.md).
   Standard RFC 6238 codes, verified against the official RFC test vectors.
 - **Backup & Restore** — export all credentials to a JSON file and import them back,
   with validation and automatic de-duplication.
+- **Encrypted vault (optional)** — turn on a **master passphrase** to encrypt every
+  credential and 2FA key at rest (WebCrypto **PBKDF2-SHA256 + AES-256-GCM**). The popup
+  then opens to a **lock screen**; nothing is readable until you unlock. Opt-in, so
+  existing setups keep working until you enable it.
 - **Security health check** — a header shield flags **reused passwords** across orgs
   and orgs **without 2FA** (SSO orgs excluded); click it for a plain-language summary.
 - **Light / Dark theme** — toggle and it's remembered.
@@ -74,7 +78,11 @@ To use **Incognito** logins, open the extension's **Details** page and enable
 
 ## How it works
 
-- Credentials are stored locally in the browser's `localStorage` as JSON.
+- Credentials are stored locally in the browser's `localStorage`. With the **encrypted
+  vault** enabled (click the 🔒 in the header → set a passphrase), they're sealed with
+  PBKDF2-SHA256 + AES-256-GCM and the popup requires that passphrase to unlock each
+  session. **If you forget the passphrase, the data can't be recovered** — keep a
+  backup (export) somewhere safe. Without the vault, storage is plaintext (legacy).
 - On login, the **background service worker** opens the correct Salesforce URL, waits
   for the page to load, then injects a script (`chrome.scripting`) to fill the login
   form and submit it. (Running this in the worker — not the popup — is what makes

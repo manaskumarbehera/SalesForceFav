@@ -32,6 +32,7 @@ popup/
   popup.css               # Popup styling (light/dark via [data-theme])
   popup.js                # DOM, chrome.* and login automation (side effects)
   credentials.js          # Pure, unit-tested logic (SFFav): validate/search/sort/import
+  cryptovault.js          # WebCrypto vault (SFVault): PBKDF2-SHA256 + AES-256-GCM
   vendor/qrcode.js        # Vendored qrcode-generator (MIT); 2FA setup QR; lint/format-ignored
 cli/                      # Companion Node CLI (reuses credentials.js)
   sffav.cjs               # Commands: init/add/list/totp/url/rm/export/import
@@ -56,6 +57,11 @@ testable helpers live in `popup/credentials.js`.
   key as a JSON array. Each entry has `credentialName`, `environment`, `ssourl`,
   `username`, `password`, `faviconColor`, `totp` (optional Base32 2FA secret),
   `pinned`, and `lastUsedAt`. Theme is stored under `"sffav-theme"`.
+- **Encrypted vault (opt-in):** when the user sets a master passphrase, credentials are
+  sealed by `SFVault` (`popup/cryptovault.js`, WebCrypto PBKDF2-SHA256 + AES-256-GCM)
+  and stored under `"sffav-vault"` instead of plaintext; the popup opens to a lock
+  screen and holds the passphrase in memory only while unlocked. The service worker is
+  unchanged — the unlocked popup passes the plaintext credential in the login message.
 - **2FA/TOTP:** `credentials.js` includes a dependency-free SHA-1 / HMAC-SHA1 /
   Base32 implementation and `totp()` (RFC 6238), unit-tested against the official
   RFC 4226/6238 vectors. The popup renders a live code chip and refreshes it on a

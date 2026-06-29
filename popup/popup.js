@@ -7,23 +7,34 @@
 // (never innerHTML) so an imported backup file can't inject markup.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = "credentials";
+const STORAGE_KEY = "credentials"; // legacy plaintext (pre-encryption)
+const VAULT_KEY = "sffav-vault"; // encrypted blob (when encryption is enabled)
 const THEME_KEY = "sffav-theme";
 
 // In-memory view state. `credentials` is the source of truth (mirrors storage).
+// `passphrase` is held only while unlocked (cleared on lock / popup close).
 const state = {
   credentials: [],
   query: "",
   editIndex: null,
+  passphrase: null,
 };
+
+const isEncrypted = () => localStorage.getItem(VAULT_KEY) !== null;
 
 document.addEventListener("DOMContentLoaded", function () {
   paintStaticIcons();
   applyTheme(localStorage.getItem(THEME_KEY) || "light");
-  state.credentials = loadCredentials();
   wireToolbar();
-  render();
-  updateTotpChips();
+  wireLock();
+  updateLockButton();
+  if (isEncrypted()) {
+    // Vault exists → start locked; credentials load only after unlock.
+    showLock("unlock");
+  } else {
+    state.credentials = loadCredentials();
+    render();
+  }
   setInterval(updateTotpChips, 1000); // live 2FA codes + countdown
 });
 
@@ -62,8 +73,133 @@ function loadCredentials() {
   }
 }
 
+// Save state.credentials — encrypted (when unlocked with a passphrase) or, for
+// users who haven't enabled encryption, as the legacy plaintext key.
 function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.credentials));
+  if (state.passphrase) {
+    SFVault.encrypt({ credentials: state.credentials }, state.passphrase)
+      .then((vault) => localStorage.setItem(VAULT_KEY, JSON.stringify(vault)))
+      .catch((e) => {
+        console.error("SalesForceFav: encrypt failed:", e);
+        toast("Could not save (encryption error)");
+      });
+  } else {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.credentials));
+  }
+}
+
+// ── encryption: lock screen, unlock, enable ──────────────────────────────────
+
+function updateLockButton() {
+  const btn = $("lockToggle");
+  if (!btn) return;
+  setIcon(btn, "lock");
+  // Active = encryption on. Use the in-memory passphrase too, since persist()
+  // writes the vault asynchronously right after enabling.
+  const active = isEncrypted() || !!state.passphrase;
+  btn.classList.toggle("on", active);
+  btn.title = active
+    ? state.passphrase
+      ? "Lock now"
+      : "Encrypted"
+    : "Encrypt with a master passphrase";
+}
+
+function wireLock() {
+  const lockToggle = $("lockToggle");
+  if (lockToggle) {
+    lockToggle.addEventListener("click", () => {
+      if (state.passphrase)
+        lock(); // unlocked → lock now
+      else if (!isEncrypted()) showLock("setup"); // not yet encrypted → set it up
+    });
+  }
+  const btn = $("lockBtn");
+  if (btn) btn.addEventListener("click", onLockSubmit);
+  const pass2 = $("lockPass2");
+  [$("lockPass"), pass2].forEach((el) => {
+    if (el) {
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") onLockSubmit();
+      });
+    }
+  });
+}
+
+function showLock(mode) {
+  const screen = $("lockScreen");
+  if (!screen) return;
+  screen.dataset.mode = mode;
+  setIcon($("lockIcon"), "lock");
+  $("lockTitle").textContent = mode === "setup" ? "Encrypt your vault" : "Vault locked";
+  $("lockHint").textContent =
+    mode === "setup"
+      ? "Set a master passphrase. It encrypts all credentials and 2FA keys. If you forget it, the data can't be recovered."
+      : "Enter your master passphrase to unlock.";
+  $("lockPass2").hidden = mode !== "setup";
+  $("lockBtn").textContent = mode === "setup" ? "Enable encryption" : "Unlock";
+  $("lockError").hidden = true;
+  $("lockPass").value = "";
+  $("lockPass2").value = "";
+  screen.hidden = false;
+  $("lockPass").focus();
+}
+
+function hideLock() {
+  const screen = $("lockScreen");
+  if (screen) screen.hidden = true;
+  $("lockPass").value = "";
+  $("lockPass2").value = "";
+}
+
+function lockError(msg) {
+  const el = $("lockError");
+  if (!el) return;
+  el.textContent = msg;
+  el.hidden = false;
+}
+
+async function onLockSubmit() {
+  const mode = $("lockScreen").dataset.mode;
+  const pass = $("lockPass").value;
+  if (!pass) return lockError("Enter a passphrase.");
+
+  if (mode === "setup") {
+    if (pass !== $("lockPass2").value) return lockError("Passphrases don't match.");
+    if (pass.length < 6) return lockError("Use at least 6 characters.");
+    state.passphrase = pass;
+    persist(); // encrypt current credentials into the vault
+    localStorage.removeItem(STORAGE_KEY); // drop the plaintext copy
+    hideLock();
+    updateLockButton();
+    render();
+    toast("Encryption enabled");
+    return;
+  }
+
+  // unlock
+  try {
+    const vault = JSON.parse(localStorage.getItem(VAULT_KEY));
+    const data = await SFVault.decrypt(vault, pass);
+    state.credentials = Array.isArray(data.credentials) ? data.credentials : [];
+    state.passphrase = pass;
+    hideLock();
+    updateLockButton();
+    render();
+  } catch (e) {
+    lockError(e.message || "Could not unlock.");
+  }
+}
+
+function lock() {
+  state.passphrase = null;
+  state.credentials = [];
+  state.query = "";
+  closeForm();
+  const list = $("credentialList");
+  if (list) list.textContent = ""; // don't leave secrets in the DOM behind the overlay
+  updateLockButton();
+  showLock("unlock");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

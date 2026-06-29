@@ -29,6 +29,10 @@ const browserGlobals = {
   Promise: "readonly",
   URL: "readonly",
   URLSearchParams: "readonly",
+  TextEncoder: "readonly",
+  TextDecoder: "readonly",
+  btoa: "readonly",
+  atob: "readonly",
   Uint8Array: "readonly",
   Int32Array: "readonly",
   DataView: "readonly",
@@ -38,6 +42,8 @@ const browserGlobals = {
   globalThis: "readonly",
   // Shared module (popup/credentials.js) exposed on the global as SFFav.
   SFFav: "readonly",
+  // Encryption module (popup/cryptovault.js) exposed as the global SFVault.
+  SFVault: "readonly",
   // Vendored QR encoder (popup/vendor/qrcode.js) exposed as the global qrcode.
   qrcode: "readonly",
 };
@@ -111,8 +117,8 @@ module.exports = [
     },
   },
   {
-    // Universal shared module — runs in the browser and in Node (jest).
-    files: ["popup/credentials.js"],
+    // Universal shared modules — run in the browser and in Node (jest).
+    files: ["popup/credentials.js", "popup/cryptovault.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "script",

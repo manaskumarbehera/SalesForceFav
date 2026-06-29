@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="popup.css" />
     <script defer src="vendor/qrcode.js"></script>
     <script defer src="credentials.js"></script>
+    <script defer src="cryptovault.js"></script>
     <script defer src="popup.js"></script>
   </head>
   <body>
@@ -19,6 +20,12 @@
           </div>
         </div>
         <div class="header-actions">
+          <button
+            id="lockToggle"
+            class="icon-btn"
+            title="Encryption"
+            aria-label="Encryption"
+          ></button>
           <button
             id="auditBtn"
             class="icon-btn"
@@ -71,6 +78,26 @@
       </div>
 
       <div id="toast" class="toast" role="status" hidden></div>
+
+      <!-- Lock / setup overlay (shown when the encrypted vault is locked, or when
+           enabling encryption). Covers the app so the list isn't usable while locked. -->
+      <div id="lockScreen" class="lock-screen" hidden>
+        <div class="lock-card">
+          <div class="lock-icon" id="lockIcon"></div>
+          <h2 id="lockTitle">Unlock</h2>
+          <p id="lockHint" class="lock-hint"></p>
+          <input id="lockPass" type="password" placeholder="Master passphrase" autocomplete="off" />
+          <input
+            id="lockPass2"
+            type="password"
+            placeholder="Confirm passphrase"
+            autocomplete="off"
+            hidden
+          />
+          <div id="lockError" class="lock-error" hidden></div>
+          <button id="lockBtn" class="btn btn-primary">Unlock</button>
+        </div>
+      </div>
     </div>
   </body>
 </html>
