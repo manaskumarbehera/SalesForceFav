@@ -17,3 +17,8 @@ coverage/
 # IDE
 .idea/
 .vscode/
+
+# Secrets — never commit
+.env
+.env.local
+.edge-certification-notes.txt

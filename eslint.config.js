@@ -41,7 +41,9 @@ const nodeGlobals = {
   __dirname: "readonly",
   console: "readonly",
   global: "writable",
+  fetch: "readonly",
   URL: "readonly",
+  URLSearchParams: "readonly",
   setTimeout: "readonly",
   clearTimeout: "readonly",
 };

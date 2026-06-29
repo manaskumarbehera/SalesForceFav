@@ -123,6 +123,16 @@ See the `load-extension` skill (`.claude/skills/load-extension/`) for a full che
 One MV3 build serves both Chrome and Edge; `build.sh` only changes the ZIP filename
 per store. `scripts/build.mjs` stages runtime files into `dist/`.
 
+### Publishing
+
+Store release is automated via `scripts/release-chrome.mjs` / `release-edge.mjs`
+(and `release-all.mjs`), driven by credentials in a gitignored `.env` (template:
+`.env.example`). **Publish is opt-in** — without `--publish` the scripts upload to
+the store draft and stop. `.github/workflows/release.yml` runs on a `v*` tag (draft
+upload) or a manual dispatch with `publish=true`. Never commit `.env` or
+`.edge-certification-notes.txt`. Do not hard-code or print credentials. See
+`DOCUMENTATION/` for first-time store setup.
+
 ## Things to be careful about
 
 - **Credentials are stored in plaintext** in `localStorage`. Do not add code that

@@ -110,6 +110,37 @@ A single Manifest V3 build serves both the **Chrome Web Store** and the
 and a build on every push. For contributor and AI-agent guidance see
 [AGENT.md](./AGENT.md).
 
+## Publishing (Chrome Web Store + Edge Add-ons)
+
+Releases are automated but **credential-gated and publish-opt-in** — uploading
+always goes to the store _draft_ first; submitting for review is a separate,
+explicit step. You need your own developer accounts and API credentials.
+
+```bash
+cp .env.example .env        # then fill in your store credentials
+npm run chrome:auth         # one-time: mint the Chrome refresh token
+
+# Dry run — build + upload to the DRAFT only (never submits):
+npm run release:chrome:dry
+npm run release:edge:dry
+
+# Submit for review / certification (opt-in):
+npm run release:chrome:publish
+npm run release:edge:publish
+
+npm run release             # bump version + ship BOTH stores (see script header)
+```
+
+Or push a `v*` tag and let `.github/workflows/release.yml` upload to each
+store's draft (publishing stays a manual `workflow_dispatch` with `publish=true`).
+Secrets go in the repo's **Settings → Secrets → Actions**, never in git.
+
+First-time setup and the exact credentials are documented in
+[`DOCUMENTATION/CHROME_WEBSTORE_RELEASE.md`](./DOCUMENTATION/CHROME_WEBSTORE_RELEASE.md)
+and [`DOCUMENTATION/EDGE_ADDONS_RELEASE.md`](./DOCUMENTATION/EDGE_ADDONS_RELEASE.md).
+Store listing/privacy answers are in
+[`DOCUMENTATION/store-privacy-answers.md`](./DOCUMENTATION/store-privacy-answers.md).
+
 ## Roadmap
 
 ### Shipped

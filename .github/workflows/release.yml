@@ -1,0 +1,63 @@
+name: Release (Chrome + Edge)
+
+# Tagging `v*` builds + validates, then uploads to each store's DRAFT (dry-run).
+# Actual submission for review/certification is a manual, opt-in action
+# (workflow_dispatch with publish=true).
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   Chrome: CHROME_EXTENSION_ID, CHROME_CLIENT_ID, CHROME_CLIENT_SECRET, CHROME_REFRESH_TOKEN
+#   Edge:   EDGE_PRODUCT_ID, EDGE_CLIENT_ID, EDGE_API_KEY
+# If a store's secrets are absent, that store's step is skipped (no failure).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Submit for review/certification (otherwise upload to draft only)"
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+      EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+      EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+      EDGE_CERT_NOTES: ${{ secrets.EDGE_CERT_NOTES }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run validate
+      - name: Chrome Web Store release
+        if: ${{ env.CHROME_EXTENSION_ID != '' }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish }}" = "true" ]; then
+            npm run release:chrome:publish
+          else
+            npm run release:chrome:dry
+          fi
+      - name: Skip Chrome (unconfigured)
+        if: ${{ env.CHROME_EXTENSION_ID == '' }}
+        run: echo "::notice::CHROME_EXTENSION_ID secret not set — skipping Chrome Web Store release."
+      - name: Edge Add-ons release
+        if: ${{ env.EDGE_PRODUCT_ID != '' && env.EDGE_API_KEY != '' }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish }}" = "true" ]; then
+            npm run release:edge:publish
+          else
+            npm run release:edge:dry
+          fi
+      - name: Skip Edge (unconfigured)
+        if: ${{ env.EDGE_PRODUCT_ID == '' || env.EDGE_API_KEY == '' }}
+        run: echo "::notice::Edge credentials not set — skipping Edge Add-ons release."

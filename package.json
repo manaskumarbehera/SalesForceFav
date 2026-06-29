@@ -12,10 +12,17 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "validate": "npm run format:check && npm run lint && npm test",
+    "check:versions": "node scripts/check-version-consistency.cjs",
+    "validate": "npm run check:versions && npm run format:check && npm run lint && npm test",
     "build": "./build.sh",
     "package:chrome": "./build.sh chrome",
     "package:edge": "./build.sh edge",
+    "chrome:auth": "node scripts/chrome-oauth-token.mjs --write",
+    "release": "node scripts/release-all.mjs",
+    "release:chrome:dry": "node scripts/release-chrome.mjs --dry-run",
+    "release:chrome:publish": "node scripts/release-chrome.mjs --publish",
+    "release:edge:dry": "node scripts/release-edge.mjs --dry-run",
+    "release:edge:publish": "node scripts/release-edge.mjs --publish",
     "prepare": "husky"
   },
   "keywords": [
