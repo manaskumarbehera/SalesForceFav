@@ -30,8 +30,9 @@ See [Privacy Policy](./Privacy%20Policy.md).
   with validation and automatic de-duplication.
 - **Encrypted vault (optional)** — turn on a **master passphrase** to encrypt every
   credential and 2FA key at rest (WebCrypto **PBKDF2-SHA256 + AES-256-GCM**). The popup
-  then opens to a **lock screen**; nothing is readable until you unlock. Opt-in, so
-  existing setups keep working until you enable it.
+  then opens to a **lock screen**; nothing is readable until you unlock. Opt-in, and you
+  can **turn it back off** anytime (the open-padlock button) to return to no-passphrase
+  storage — your credentials are kept.
 - **Security health check** — a header shield flags **reused passwords** across orgs
   and orgs **without 2FA** (SSO orgs excluded); click it for a plain-language summary.
 - **Light / Dark theme** — toggle and it's remembered.

@@ -109,6 +109,29 @@ function updateLockButton() {
       ? "Lock now"
       : "Encrypted"
     : "Encrypt with a master passphrase";
+
+  // "Turn off encryption" — only meaningful when unlocked and encrypted.
+  const disableBtn = $("encDisable");
+  if (disableBtn) {
+    setIcon(disableBtn, "unlock");
+    disableBtn.hidden = !(isEncrypted() && state.passphrase);
+  }
+}
+
+// Decrypt back to plaintext and remove the vault, so there's no per-session
+// passphrase prompt. Only available while unlocked.
+function disableEncryption() {
+  if (!isEncrypted() || !state.passphrase) return;
+  const ok = confirm(
+    "Turn off encryption?\n\nYour credentials will be stored UNENCRYPTED (no passphrase " +
+      "needed to open the popup). You can re-enable encryption anytime. Continue?"
+  );
+  if (!ok) return;
+  state.passphrase = null; // persist() now writes the legacy plaintext key
+  persist();
+  localStorage.removeItem(VAULT_KEY);
+  updateLockButton();
+  toast("Encryption turned off");
 }
 
 function wireLock() {
@@ -124,6 +147,8 @@ function wireLock() {
   if (btn) btn.addEventListener("click", onLockSubmit);
   const lockReset = $("lockReset");
   if (lockReset) lockReset.addEventListener("click", resetVault);
+  const encDisable = $("encDisable");
+  if (encDisable) encDisable.addEventListener("click", disableEncryption);
   const pass2 = $("lockPass2");
   [$("lockPass"), pass2].forEach((el) => {
     if (el) {
@@ -275,6 +300,7 @@ const ICONS = {
     '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
   user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  unlock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
   star: '<polygon points="12 2 15.1 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 8.9 8.3 12 2"/>',
   edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
   trash:
