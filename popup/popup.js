@@ -148,7 +148,7 @@ function showLock(mode) {
     mode === "setup"
       ? "Set a master passphrase to encrypt all credentials and 2FA keys. If you forget it, the data can't be recovered."
       : bioOn
-        ? "Unlock with your fingerprint, or your passphrase."
+        ? `Unlock with ${bioLabel()}, or your passphrase.`
         : "Enter your master passphrase to unlock.";
   $("lockPass2").hidden = mode !== "setup";
   $("lockBtn").textContent = mode === "setup" ? "Enable encryption" : "Unlock";
@@ -157,7 +157,7 @@ function showLock(mode) {
   if (bioUnlock) {
     bioUnlock.hidden = !bioOn;
     if (bioOn)
-      bioUnlock.innerHTML = `${svgMarkup("fingerprint")}<span>Unlock with Touch ID / Windows Hello</span>`;
+      bioUnlock.innerHTML = `${svgMarkup("fingerprint")}<span>Unlock with ${bioLabel()}</span>`;
   }
   if ($("lockOr")) $("lockOr").hidden = !bioOn;
   // Biometric is the primary action when enrolled; otherwise the passphrase button is.
@@ -228,6 +228,15 @@ async function onLockSubmit() {
 
 const BIO_KEY = "sffav-bio";
 const bioEnrolled = () => localStorage.getItem(BIO_KEY) !== null;
+
+// Name the device authenticator per platform: Touch ID (mac), Windows Hello (win).
+function bioLabel() {
+  const p =
+    (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  if (/mac/i.test(p)) return "Touch ID";
+  if (/win/i.test(p)) return "Windows Hello";
+  return "biometric unlock";
+}
 
 function bufToB64(buf) {
   const b = new Uint8Array(buf);
@@ -302,10 +311,10 @@ async function enrollBiometric() {
       })
     );
     updateBioButton();
-    toast("Biometric unlock enabled");
+    toast(`${bioLabel()} unlock enabled`);
   } catch (e) {
     console.error("SalesForceFav: biometric enroll failed:", e);
-    toast(`Couldn't enable biometric (${e.name || "error"})`);
+    toast(`Couldn't enable ${bioLabel()} — ${e.name || "Error"}: ${e.message || ""}`);
   }
 }
 
@@ -329,7 +338,15 @@ async function biometricUnlock() {
     updateLockButton();
     render();
   } catch (e) {
-    lockError(`Biometric unlock failed (${e.name || "error"})`);
+    console.error("SalesForceFav: biometric unlock failed:", e);
+    // A "did not match" means the stored wrap predates a fix / used a different
+    // PRF — the fix is to re-enroll (unlock with the passphrase, then re-add).
+    const stale = /did not match/i.test(e.message || "");
+    lockError(
+      stale
+        ? "Biometric data is out of date — unlock with your passphrase, then re-enroll."
+        : `Biometric unlock failed — ${e.name || "Error"}: ${e.message || ""}`
+    );
   }
 }
 
@@ -342,7 +359,9 @@ function updateBioButton() {
   const show = isEncrypted() && !!state.passphrase;
   btn.hidden = !show;
   btn.classList.toggle("on", bioEnrolled());
-  btn.title = bioEnrolled() ? "Biometric unlock on — click to remove" : "Enable biometric unlock";
+  btn.title = bioEnrolled()
+    ? `${bioLabel()} unlock on — click to remove`
+    : `Enable ${bioLabel()} unlock`;
 }
 
 // Escape hatch for a forgotten passphrase: the encrypted data can't be decrypted
