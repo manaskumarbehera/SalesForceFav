@@ -21,6 +21,13 @@
         </div>
         <div class="header-actions">
           <button
+            id="bioToggle"
+            class="icon-btn"
+            title="Biometric unlock"
+            aria-label="Biometric unlock"
+            hidden
+          ></button>
+          <button
             id="lockToggle"
             class="icon-btn"
             title="Encryption"
@@ -96,10 +103,9 @@
           />
           <div id="lockError" class="lock-error" hidden></div>
           <button id="lockBtn" class="btn btn-primary">Unlock</button>
-          <button id="bioProbe" class="lock-link" type="button">
-            Test biometric support (experimental)
+          <button id="bioUnlock" class="btn lock-bio" type="button" hidden>
+            Use Touch ID / Windows Hello
           </button>
-          <pre id="bioProbeOut" class="bio-out" hidden></pre>
         </div>
       </div>
     </div>
