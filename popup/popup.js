@@ -75,17 +75,23 @@ function loadCredentials() {
 
 // Save state.credentials — encrypted (when unlocked with a passphrase) or, for
 // users who haven't enabled encryption, as the legacy plaintext key.
+// Returns a promise resolving true on a successful write (false if encryption
+// failed) so callers that must sequence on it (enabling encryption) can await.
 function persist() {
   if (state.passphrase) {
-    SFVault.encrypt({ credentials: state.credentials }, state.passphrase)
-      .then((vault) => localStorage.setItem(VAULT_KEY, JSON.stringify(vault)))
+    return SFVault.encrypt({ credentials: state.credentials }, state.passphrase)
+      .then((vault) => {
+        localStorage.setItem(VAULT_KEY, JSON.stringify(vault));
+        return true;
+      })
       .catch((e) => {
         console.error("SalesForceFav: encrypt failed:", e);
         toast("Could not save (encryption error)");
+        return false;
       });
-  } else {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.credentials));
   }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.credentials));
+  return Promise.resolve(true);
 }
 
 // ── encryption: lock screen, unlock, enable ──────────────────────────────────
@@ -174,8 +180,13 @@ async function onLockSubmit() {
     if (pass !== $("lockPass2").value) return lockError("Passphrases don't match.");
     if (pass.length < 6) return lockError("Use at least 6 characters.");
     state.passphrase = pass;
-    persist(); // encrypt current credentials into the vault
-    localStorage.removeItem(STORAGE_KEY); // drop the plaintext copy
+    // Only drop the plaintext copy AFTER the encrypted vault is confirmed written.
+    const ok = await persist();
+    if (!ok || !isEncrypted()) {
+      state.passphrase = null;
+      return lockError("Couldn't enable encryption — please try again.");
+    }
+    localStorage.removeItem(STORAGE_KEY);
     hideLock();
     updateLockButton();
     render();
