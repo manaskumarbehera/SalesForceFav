@@ -18,6 +18,10 @@
 
   const ENVIRONMENTS = ["sandbox", "production", "sso"];
 
+  // Default tab/favicon color for new and imported credentials (matches the
+  // CSS --accent token). Single source of truth so it can't drift.
+  const DEFAULT_FAVICON_COLOR = "#3a5ccc";
+
   // Resolve the URL to open for a credential. SSO uses the user-supplied URL;
   // standard environments map to a fixed Salesforce host. Returns null when the
   // environment is unknown or an SSO credential has no URL.
@@ -192,7 +196,7 @@
       ssourl: raw.ssourl || "",
       username: raw.username || "",
       password: raw.password || "",
-      faviconColor: raw.faviconColor || "#2563eb",
+      faviconColor: raw.faviconColor || DEFAULT_FAVICON_COLOR,
       pinned: raw.pinned === true,
       lastUsedAt: typeof raw.lastUsedAt === "number" ? raw.lastUsedAt : null,
     };
@@ -214,7 +218,9 @@
     const credentials = arr
       .filter((c) => c && typeof c === "object")
       .map(normalizeImported)
-      .filter((c) => c.credentialName);
+      // Require a name and a recognized environment, else the card's launch
+      // buttons would resolve no URL and silently do nothing.
+      .filter((c) => c.credentialName && ENVIRONMENTS.includes(c.environment));
     if (credentials.length === 0) {
       return { credentials: [], error: "No valid credentials found in this file." };
     }
@@ -241,6 +247,7 @@
   const api = {
     SF_LOGIN_URLS,
     ENVIRONMENTS,
+    DEFAULT_FAVICON_COLOR,
     EXPORT_APP,
     EXPORT_FORMAT,
     resolveSalesforceUrl,

@@ -246,19 +246,25 @@ body {
   text-overflow: ellipsis;
 }
 .cred-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 3px;
+  min-width: 0;
+}
+.cred-sub {
   font-size: 11.5px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
 }
 .cred-badge {
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: 5px;
   flex-shrink: 0;
   border: 1px solid transparent;

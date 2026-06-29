@@ -62,6 +62,11 @@ const loginToSalesforce = async (credential, loginType) => {
     return;
   }
 
+  // 8. For SSO we just open the identity provider and let the user authenticate
+  // there — injecting the Salesforce username/password form filler would target
+  // fields that don't exist on the IdP page and pop a spurious error alert.
+  const injectLogin = credential.environment !== "sso";
+
   // 9. Listener to execute login script when a new tab is created.
   const setOnCreatedListener = async (tabId, credential) => {
     const tab = await chrome.tabs.get(tabId);
@@ -119,7 +124,7 @@ const loginToSalesforce = async (credential, loginType) => {
             tab.id
           } and URL ${tab.url}`
         );
-        setOnCreatedListener(tab.id, credential);
+        if (injectLogin) setOnCreatedListener(tab.id, credential);
       } else {
         console.error(`No tab found in the new ${incognito ? "Incognito" : "Regular"} window.`);
         alert(
@@ -135,7 +140,7 @@ const loginToSalesforce = async (credential, loginType) => {
       active: true,
     });
     if (tab && tab.id) {
-      await setOnUpdatedListener(tab.id, credential);
+      if (injectLogin) await setOnUpdatedListener(tab.id, credential);
     } else {
       console.error("Failed to create tab for newTab login.");
     }
@@ -461,7 +466,7 @@ function buildCard(credential) {
   // Color rail reflecting the favicon color.
   const rail = document.createElement("span");
   rail.className = "cred-rail";
-  rail.style.backgroundColor = credential.faviconColor || "#2563eb";
+  rail.style.backgroundColor = credential.faviconColor || SFFav.DEFAULT_FAVICON_COLOR;
   card.appendChild(rail);
 
   // Main body: name row + meta row.
@@ -484,20 +489,27 @@ function buildCard(credential) {
   name.textContent = credential.credentialName; // untrusted → textContent
   nameRow.appendChild(name);
 
+  body.appendChild(nameRow);
+
+  // Meta row: environment badge + username/URL. Keeping the badge here (rather
+  // than next to the name) gives long org names the full width of the card.
+  const meta = document.createElement("div");
+  meta.className = "cred-meta";
+
   const env = ENV_META[credential.environment] || { label: credential.environment || "?", cls: "" };
   const badge = document.createElement("span");
   badge.className = `cred-badge ${env.cls}`;
   badge.textContent = env.label;
-  nameRow.appendChild(badge);
+  meta.appendChild(badge);
 
-  body.appendChild(nameRow);
-
-  const meta = document.createElement("div");
-  meta.className = "cred-meta";
-  meta.textContent =
+  const sub = document.createElement("span");
+  sub.className = "cred-sub";
+  sub.textContent =
     credential.environment === "sso"
       ? credential.ssourl || "SSO login"
       : credential.username || "—";
+  meta.appendChild(sub);
+
   body.appendChild(meta);
 
   card.appendChild(body);
@@ -579,6 +591,9 @@ function removeCard(credential) {
   const idx = indexOf(credential);
   if (idx === -1) return;
   if (!confirm(`Delete "${credential.credentialName}"?`)) return;
+  // Deleting shifts indices, which would invalidate an in-progress edit; close
+  // the form first so editIndex can't point at the wrong (or a missing) row.
+  closeForm();
   state.credentials = SFFav.removeCredential(state.credentials, idx);
   persist();
   render();
@@ -692,7 +707,7 @@ function openForm(editIndex) {
     $("ssourl").value = cred.ssourl || "";
     $("username").value = cred.username || "";
     $("password").value = cred.password || "";
-    $("faviconColor").value = cred.faviconColor || "#2563eb";
+    $("faviconColor").value = cred.faviconColor || SFFav.DEFAULT_FAVICON_COLOR;
     $("pinned").checked = cred.pinned === true;
   }
   updateEnvFields(environment.value);
@@ -720,16 +735,23 @@ function updateEnvFields(value) {
 
 function onFormSubmit(event) {
   event.preventDefault();
+  const environment = $("environment").value;
+  const isSSO = environment === "sso";
+  // Re-resolve the credential being edited defensively — the list could have
+  // changed (the editing index is only trustworthy if it still points at a row).
+  const editing = state.editIndex !== null ? state.credentials[state.editIndex] : null;
+
+  // Only persist the fields that belong to the chosen environment, so switching
+  // (e.g. standard → SSO) doesn't leave a stale password or SSO URL in storage.
   const newCredential = {
     credentialName: $("credentialName").value.trim(),
-    environment: $("environment").value,
-    ssourl: $("ssourl").value.trim(),
-    username: $("username").value.trim(),
-    password: $("password").value,
+    environment,
+    ssourl: isSSO ? $("ssourl").value.trim() : "",
+    username: isSSO ? "" : $("username").value.trim(),
+    password: isSSO ? "" : $("password").value,
     faviconColor: $("faviconColor").value,
     pinned: $("pinned").checked,
-    lastUsedAt:
-      state.editIndex !== null ? state.credentials[state.editIndex].lastUsedAt || null : null,
+    lastUsedAt: (editing && editing.lastUsedAt) || null,
   };
 
   const { valid, errors } = SFFav.validateCredential(
@@ -815,7 +837,7 @@ const formHtml = `
 
     <div class="form-row">
       <label for="faviconColor">Tab color</label>
-      <input type="color" id="faviconColor" value="#2563eb" />
+      <input type="color" id="faviconColor" value="${SFFav.DEFAULT_FAVICON_COLOR}" />
       <label class="pin-label"><input type="checkbox" id="pinned" /> Pin to top</label>
     </div>
 

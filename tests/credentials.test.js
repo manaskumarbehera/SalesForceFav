@@ -266,22 +266,38 @@ describe("serializeExport / parseImport round trip", () => {
   });
 
   test("import accepts a bare array", () => {
-    const { credentials, error } = parseImport(JSON.stringify([{ credentialName: "X" }]));
+    const { credentials, error } = parseImport(
+      JSON.stringify([{ credentialName: "X", environment: "sandbox" }])
+    );
     expect(error).toBeNull();
     expect(credentials).toHaveLength(1);
   });
 
   test("import defaults missing pinned/lastUsedAt fields", () => {
-    const { credentials } = parseImport(JSON.stringify([{ credentialName: "X" }]));
+    const { credentials } = parseImport(
+      JSON.stringify([{ credentialName: "X", environment: "sandbox" }])
+    );
     expect(credentials[0].pinned).toBe(false);
     expect(credentials[0].lastUsedAt).toBeNull();
-    expect(credentials[0].faviconColor).toBe("#2563eb");
+    expect(credentials[0].faviconColor).toBe("#3a5ccc");
   });
 
   test("import rejects junk and empties", () => {
     expect(parseImport("not json").error).toMatch(/valid JSON/i);
     expect(parseImport(JSON.stringify({ nope: 1 })).error).toMatch(/No credentials/i);
     expect(parseImport(JSON.stringify([{}])).error).toMatch(/No valid/i);
+  });
+
+  test("import rejects records with an unknown environment", () => {
+    const { credentials, error } = parseImport(
+      JSON.stringify([
+        { credentialName: "Good", environment: "production" },
+        { credentialName: "Bad", environment: "Prod" },
+        { credentialName: "NoEnv" },
+      ])
+    );
+    expect(error).toBeNull();
+    expect(credentials.map((c) => c.credentialName)).toEqual(["Good"]);
   });
 });
 
