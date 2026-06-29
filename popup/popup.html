@@ -21,13 +21,6 @@
         </div>
         <div class="header-actions">
           <button
-            id="bioToggle"
-            class="icon-btn"
-            title="Biometric unlock"
-            aria-label="Biometric unlock"
-            hidden
-          ></button>
-          <button
             id="lockToggle"
             class="icon-btn"
             title="Encryption"
@@ -94,11 +87,6 @@
           <h2 id="lockTitle">Vault locked</h2>
           <p id="lockHint" class="lock-hint"></p>
 
-          <button id="bioUnlock" class="btn btn-primary lock-bio" type="button" hidden>
-            Unlock with Touch ID / Windows Hello
-          </button>
-          <div id="lockOr" class="lock-or" hidden>or use your passphrase</div>
-
           <input id="lockPass" type="password" placeholder="Master passphrase" autocomplete="off" />
           <input
             id="lockPass2"
@@ -108,10 +96,7 @@
             hidden
           />
           <div id="lockError" class="lock-error" hidden></div>
-          <button id="lockBtn" class="btn lock-submit">Unlock</button>
-          <button id="lockOpenTab" class="lock-reset" type="button" hidden>
-            Touch ID / Windows Hello not prompting? Open in a tab
-          </button>
+          <button id="lockBtn" class="btn btn-primary lock-submit">Unlock</button>
           <button id="lockReset" class="lock-reset" type="button" hidden>
             Forgot passphrase? Reset vault
           </button>

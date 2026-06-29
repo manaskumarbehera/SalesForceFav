@@ -79,40 +79,7 @@
     return JSON.parse(dec.decode(pt));
   }
 
-  // ── biometric wrapping (WebAuthn PRF) ──────────────────────────────────────
-  // The WebAuthn PRF extension yields 32 stable bytes from the platform
-  // authenticator (Touch ID / Windows Hello). We use those bytes directly as an
-  // AES-256-GCM key to wrap the vault's master passphrase, so a fingerprint
-  // unwraps it. The PRF bytes are never stored; only the wrapped passphrase is.
-  async function importPrfKey(prfBytes) {
-    const raw = prfBytes instanceof Uint8Array ? prfBytes : new Uint8Array(prfBytes);
-    if (raw.length !== 32) throw new Error("Expected 32 bytes of PRF output.");
-    return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
-  }
-
-  async function wrapSecret(secret, prfBytes) {
-    const key = await importPrfKey(prfBytes);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(secret));
-    return { iv: toB64(iv), cipher: toB64(new Uint8Array(ct)) };
-  }
-
-  async function unwrapSecret(wrapped, prfBytes) {
-    const key = await importPrfKey(prfBytes);
-    let pt;
-    try {
-      pt = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: fromB64(wrapped.iv) },
-        key,
-        fromB64(wrapped.cipher)
-      );
-    } catch {
-      throw new Error("Biometric key did not match.");
-    }
-    return dec.decode(pt);
-  }
-
-  const api = { encrypt, decrypt, wrapSecret, unwrapSecret, ITERATIONS };
+  const api = { encrypt, decrypt, ITERATIONS };
   root.SFVault = api;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;

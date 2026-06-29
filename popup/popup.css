@@ -622,22 +622,6 @@ body.sff-locked #formContainer {
   line-height: 1.45;
   color: var(--text-muted);
 }
-.lock-bio {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-.lock-bio svg {
-  width: 16px;
-  height: 16px;
-}
-.lock-or {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin: 2px 0;
-  position: relative;
-}
 .lock-submit {
   width: 100%;
 }
@@ -662,9 +646,6 @@ body.sff-locked #formContainer {
   width: 100%;
   font-size: 12px;
   color: var(--danger);
-}
-#bioToggle.on {
-  color: var(--accent);
 }
 .lock-reset {
   background: none;

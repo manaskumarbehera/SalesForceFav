@@ -58,26 +58,4 @@ describe("extension WebCrypto vault", () => {
     await expect(SFVault.decrypt({ nope: 1 }, "pw")).rejects.toThrow(/Not a SalesForceFav vault/i);
     await expect(SFVault.encrypt(DATA, "")).rejects.toThrow(/passphrase/i);
   });
-
-  // The PRF wrap/unwrap (biometric) logic — the WebAuthn calls themselves are
-  // verified on a real device, but the key-wrapping is testable with fixed bytes.
-  describe("biometric PRF wrap/unwrap", () => {
-    const prf = new Uint8Array(32).fill(7); // stand-in for the authenticator's PRF output
-    test("unwraps with the same PRF bytes", async () => {
-      const wrapped = await SFVault.wrapSecret("master-passphrase", prf);
-      expect(await SFVault.unwrapSecret(wrapped, prf)).toBe("master-passphrase");
-    });
-    test("wrapped passphrase is not stored in the clear", async () => {
-      const wrapped = await SFVault.wrapSecret("master-passphrase", prf);
-      expect(JSON.stringify(wrapped)).not.toContain("master-passphrase");
-    });
-    test("different PRF bytes fail to unwrap", async () => {
-      const wrapped = await SFVault.wrapSecret("master-passphrase", prf);
-      const other = new Uint8Array(32).fill(8);
-      await expect(SFVault.unwrapSecret(wrapped, other)).rejects.toThrow(/did not match/i);
-    });
-    test("requires 32 bytes of PRF output", async () => {
-      await expect(SFVault.wrapSecret("x", new Uint8Array(16))).rejects.toThrow(/32 bytes/i);
-    });
-  });
 });

@@ -28,7 +28,6 @@ document.addEventListener("DOMContentLoaded", function () {
   wireToolbar();
   wireLock();
   updateLockButton();
-  updateBioButton();
   if (isEncrypted()) {
     // Vault exists → start locked; credentials load only after unlock.
     showLock("unlock");
@@ -117,24 +116,8 @@ function wireLock() {
   }
   const btn = $("lockBtn");
   if (btn) btn.addEventListener("click", onLockSubmit);
-  const bioUnlock = $("bioUnlock");
-  if (bioUnlock) bioUnlock.addEventListener("click", biometricUnlock);
   const lockReset = $("lockReset");
   if (lockReset) lockReset.addEventListener("click", resetVault);
-  const lockOpenTab = $("lockOpenTab");
-  if (lockOpenTab) {
-    lockOpenTab.addEventListener("click", () => {
-      // WebAuthn (Touch ID / Windows Hello) is unreliable in the action popup,
-      // which closes when the OS prompt steals focus. A full tab keeps focus.
-      chrome.tabs.create({ url: chrome.runtime.getURL("popup/popup.html") });
-    });
-  }
-  const bioToggle = $("bioToggle");
-  if (bioToggle) {
-    bioToggle.addEventListener("click", () =>
-      bioEnrolled() ? removeBiometric() : enrollBiometric()
-    );
-  }
   const pass2 = $("lockPass2");
   [$("lockPass"), pass2].forEach((el) => {
     if (el) {
@@ -149,38 +132,22 @@ function showLock(mode) {
   const screen = $("lockScreen");
   if (!screen) return;
   screen.dataset.mode = mode;
-  const bioOn = mode === "unlock" && bioEnrolled();
 
   $("lockTitle").textContent = mode === "setup" ? "Encrypt your vault" : "Vault locked";
   $("lockHint").textContent =
     mode === "setup"
       ? "Set a master passphrase to encrypt all credentials and 2FA keys. If you forget it, the data can't be recovered."
-      : bioOn
-        ? `Unlock with ${bioLabel()}, or your passphrase.`
-        : "Enter your master passphrase to unlock.";
+      : "Enter your master passphrase to unlock.";
   $("lockPass2").hidden = mode !== "setup";
   $("lockBtn").textContent = mode === "setup" ? "Enable encryption" : "Unlock";
-
-  const bioUnlock = $("bioUnlock");
-  if (bioUnlock) {
-    bioUnlock.hidden = !bioOn;
-    if (bioOn)
-      bioUnlock.innerHTML = `${svgMarkup("fingerprint")}<span>Unlock with ${bioLabel()}</span>`;
-  }
-  if ($("lockOr")) $("lockOr").hidden = !bioOn;
-  // Biometric is the primary action when enrolled; otherwise the passphrase button is.
-  $("lockBtn").classList.toggle("btn-primary", !bioOn);
   if ($("lockReset")) $("lockReset").hidden = mode !== "unlock";
-  // The "open in a tab" workaround only matters when biometric is enrolled.
-  if ($("lockOpenTab")) $("lockOpenTab").hidden = !bioOn;
 
   $("lockError").hidden = true;
   $("lockPass").value = "";
   $("lockPass2").value = "";
   screen.hidden = false;
   document.body.classList.add("sff-locked"); // hide app chrome behind the lock card
-  if (bioOn) bioUnlock.focus();
-  else $("lockPass").focus();
+  $("lockPass").focus();
 }
 
 function hideLock() {
@@ -230,153 +197,9 @@ async function onLockSubmit() {
   }
 }
 
-// ── biometric unlock (WebAuthn PRF: Touch ID / Windows Hello) ────────────────
-// The platform authenticator's PRF output (32 stable bytes) wraps the vault
-// passphrase. Enroll while unlocked; unlock later with a fingerprint. The PRF
-// bytes are never stored — only the wrapped passphrase is. Passphrase is always
-// a fallback, and the vault's own encryption is unchanged.
-
-const BIO_KEY = "sffav-bio";
-const bioEnrolled = () => localStorage.getItem(BIO_KEY) !== null;
-
-// Name the device authenticator per platform: Touch ID (mac), Windows Hello (win).
-function bioLabel() {
-  const p =
-    (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
-  if (/mac/i.test(p)) return "Touch ID";
-  if (/win/i.test(p)) return "Windows Hello";
-  return "biometric unlock";
-}
-
-function bufToB64(buf) {
-  const b = new Uint8Array(buf);
-  let s = "";
-  for (let i = 0; i < b.length; i += 1) s += String.fromCharCode(b[i]);
-  return btoa(s);
-}
-function b64ToBuf(str) {
-  return Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
-}
-
-// Run a WebAuthn assertion and return the 32-byte PRF output.
-async function getPrfOutput(credentialIdB64, saltB64) {
-  const assertion = await navigator.credentials.get({
-    publicKey: {
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
-      allowCredentials: [{ id: b64ToBuf(credentialIdB64), type: "public-key" }],
-      userVerification: "required",
-      extensions: { prf: { eval: { first: b64ToBuf(saltB64) } } },
-      timeout: 60000,
-    },
-  });
-  const ext = assertion.getClientExtensionResults();
-  const first = ext && ext.prf && ext.prf.results && ext.prf.results.first;
-  if (!first) throw new Error("PRF output unavailable");
-  return new Uint8Array(first);
-}
-
-async function enrollBiometric() {
-  if (!state.passphrase) return toast("Unlock the vault first");
-  try {
-    const salt = crypto.getRandomValues(new Uint8Array(32));
-    const cred = await navigator.credentials.create({
-      publicKey: {
-        challenge: crypto.getRandomValues(new Uint8Array(32)),
-        rp: { name: "SalesForceFav" },
-        user: {
-          id: crypto.getRandomValues(new Uint8Array(16)),
-          name: "vault",
-          displayName: "SalesForceFav Vault",
-        },
-        pubKeyCredParams: [
-          { type: "public-key", alg: -7 },
-          { type: "public-key", alg: -257 },
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: "platform",
-          userVerification: "required",
-          residentKey: "required",
-        },
-        extensions: { prf: { eval: { first: salt } } },
-        timeout: 60000,
-      },
-    });
-    const credId = bufToB64(cred.rawId);
-    const saltB64 = bufToB64(salt);
-    if (!(cred.getClientExtensionResults().prf || {}).enabled) {
-      throw new Error("This authenticator didn't enable PRF");
-    }
-    // Always derive the PRF via get() — the same path unlock uses — so the value
-    // that wraps the passphrase is guaranteed identical to the one at unlock.
-    // (PRF results returned at create-time can differ on some platforms.)
-    const prf = await getPrfOutput(credId, saltB64);
-    const wrapped = await SFVault.wrapSecret(state.passphrase, prf);
-    localStorage.setItem(
-      BIO_KEY,
-      JSON.stringify({
-        credentialId: credId,
-        salt: saltB64,
-        iv: wrapped.iv,
-        cipher: wrapped.cipher,
-      })
-    );
-    updateBioButton();
-    toast(`${bioLabel()} unlock enabled`);
-  } catch (e) {
-    console.error("SalesForceFav: biometric enroll failed:", e);
-    toast(`Couldn't enable ${bioLabel()} — ${e.name || "Error"}: ${e.message || ""}`);
-  }
-}
-
-function removeBiometric() {
-  localStorage.removeItem(BIO_KEY);
-  updateBioButton();
-  toast("Biometric unlock removed");
-}
-
-async function biometricUnlock() {
-  const bio = JSON.parse(localStorage.getItem(BIO_KEY) || "null");
-  if (!bio) return;
-  try {
-    const prf = await getPrfOutput(bio.credentialId, bio.salt);
-    const pass = await SFVault.unwrapSecret({ iv: bio.iv, cipher: bio.cipher }, prf);
-    const vault = JSON.parse(localStorage.getItem(VAULT_KEY));
-    const data = await SFVault.decrypt(vault, pass);
-    state.credentials = Array.isArray(data.credentials) ? data.credentials : [];
-    state.passphrase = pass;
-    hideLock();
-    updateLockButton();
-    render();
-  } catch (e) {
-    console.error("SalesForceFav: biometric unlock failed:", e);
-    // A "did not match" means the stored wrap predates a fix / used a different
-    // PRF — the fix is to re-enroll (unlock with the passphrase, then re-add).
-    const stale = /did not match/i.test(e.message || "");
-    lockError(
-      stale
-        ? "Biometric data is out of date — unlock with your passphrase, then re-enroll."
-        : `Biometric unlock failed — ${e.name || "Error"}: ${e.message || ""}`
-    );
-  }
-}
-
-// The header fingerprint button: shown only when the vault is unlocked. Toggles
-// enrollment on/off.
-function updateBioButton() {
-  const btn = $("bioToggle");
-  if (!btn) return;
-  setIcon(btn, "fingerprint");
-  const show = isEncrypted() && !!state.passphrase;
-  btn.hidden = !show;
-  btn.classList.toggle("on", bioEnrolled());
-  btn.title = bioEnrolled()
-    ? `${bioLabel()} unlock on — click to remove`
-    : `Enable ${bioLabel()} unlock`;
-}
-
 // Escape hatch for a forgotten passphrase: the encrypted data can't be decrypted
-// without it, so reset clears the vault (and biometric enrollment) and starts the
-// extension fresh, unencrypted. Destructive — guarded by a confirm.
+// without it, so reset clears the vault and starts fresh, unencrypted. Destructive —
+// guarded by a confirm.
 function resetVault() {
   const msg =
     "Forgot your passphrase?\n\nThe encrypted orgs can't be recovered without it. " +
@@ -384,13 +207,11 @@ function resetVault() {
     "If you have a backup file you can restore it afterwards. Continue?";
   if (!confirm(msg)) return;
   localStorage.removeItem(VAULT_KEY);
-  localStorage.removeItem(BIO_KEY);
   localStorage.removeItem(STORAGE_KEY);
   state.passphrase = null;
   state.credentials = [];
   hideLock();
   updateLockButton();
-  updateBioButton();
   render();
   toast("Vault reset — encryption is off");
 }
@@ -461,8 +282,6 @@ const ICONS = {
   close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   bolt: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
-  fingerprint:
-    '<path d="M12 2a9 9 0 0 0-9 9"/><path d="M21 11a9 9 0 0 0-3-6.7"/><path d="M5 20c-.8-1.7-1-3.6-1-6a8 8 0 0 1 13-6"/><path d="M8.5 21.5C7.5 19 7 16.5 7 13a5 5 0 0 1 10 0c0 1.2 0 2.4.2 3.5"/><path d="M11 21c-.6-2-1-4.7-1-8a2 2 0 0 1 4 0c0 4 .4 7 1.5 9"/>',
 };
 
 // Return SVG markup for an icon. `fill` makes a solid glyph (used for pins).
@@ -552,7 +371,6 @@ function render() {
 
   updateCount(visible.length);
   updateAudit();
-  updateBioButton();
 
   if (visible.length === 0) {
     if (empty) {

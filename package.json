@@ -1,6 +1,6 @@
 {
   "name": "salesforcefav-extension",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "private": true,
   "description": "SalesForceFav — a Manifest V3 Chrome/Edge extension that stores Salesforce credentials and automates login.",
   "type": "commonjs",

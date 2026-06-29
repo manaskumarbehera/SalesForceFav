@@ -32,10 +32,6 @@ See [Privacy Policy](./Privacy%20Policy.md).
   credential and 2FA key at rest (WebCrypto **PBKDF2-SHA256 + AES-256-GCM**). The popup
   then opens to a **lock screen**; nothing is readable until you unlock. Opt-in, so
   existing setups keep working until you enable it.
-- **Biometric unlock (Touch ID / Windows Hello)** — once the vault is on, enroll your
-  device biometric (WebAuthn **PRF**) to unlock with a fingerprint instead of typing the
-  passphrase. The biometric derives the key that unwraps the passphrase — it's never
-  stored — and the master passphrase always remains a fallback.
 - **Security health check** — a header shield flags **reused passwords** across orgs
   and orgs **without 2FA** (SSO orgs excluded); click it for a plain-language summary.
 - **Light / Dark theme** — toggle and it's remembered.
