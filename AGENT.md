@@ -24,7 +24,8 @@ HTML/CSS/JS loaded directly by the browser. npm is used only for dev tooling
 ## Repository layout
 
 ```
-manifest.json             # MV3 manifest: name, version, permissions, icons, popup
+manifest.json             # MV3 manifest: name, version, permissions, icons, popup, SW
+background.js             # Service worker: owns the open→wait→inject login flow
 icons/                    # Generated PNG icons (16/32/48/128)
 popup/
   popup.html              # Popup markup — header, toolbar, list, form container
@@ -67,11 +68,14 @@ testable helpers live in `popup/credentials.js`.
   skipping name duplicates. All of this is pure logic in `credentials.js`.
 - **Environment → URL:** `sandbox` → `https://test.salesforce.com/`,
   `production` → `https://login.salesforce.com/`, `sso` → the user's `ssourl`.
-- **Login automation:** the extension opens the chosen URL, waits for the tab to
-  finish loading, then `chrome.scripting.executeScript`s `loginSalesforce()` into the
-  page to fill `#username` / `#password` and click `#Login`.
-- **Favicon recoloring:** after login, `checkLoginSuccess` → `changeFavicon` recolors
-  the favicon of every tab sharing the logged-in origin.
+- **Login automation:** lives in the **background service worker** (`background.js`),
+  not the popup. The popup sends a `{type:"sffav-login", credential, loginType}`
+  message; the worker opens the tab/window, awaits the tab's `complete` status, then
+  `chrome.scripting.executeScript`s `fillSalesforceLogin()` into the page to fill
+  `#username` / `#password` and click `#Login`. This must be in the worker because
+  opening a tab closes the popup, which would kill any deferred listener it held.
+  (Post-login favicon recoloring was removed in this refactor; re-add it in the worker
+  once the core fill is confirmed on a real extension load.)
 
 ## Conventions
 
@@ -103,10 +107,21 @@ npm run validate   # lint + test (what CI runs)
 
 Tests live in `tests/` and cover the pure logic in `popup/credentials.js`
 (URL resolution, validation, unique-name checks, immutable CRUD, hex→RGB, search,
-sort, and backup import/export/merge). There is no headless-browser test — the popup's
-DOM rendering, search, theme, and form can be spot-checked by serving the repo
-(`python3 -m http.server`) and opening `popup/popup.html`; the `chrome.*` login/launch
-path is verified by loading the unpacked extension manually.
+sort, and backup import/export/merge). The popup's DOM rendering can be spot-checked by
+serving the repo (`python3 -m http.server`) and opening `popup/popup.html`.
+
+#### E2E (`npm run test:e2e`) — the auto-login path
+
+`tests/e2e/smoke.mjs` (Puppeteer) loads the real unpacked extension, opens the popup,
+clicks launch, **immediately closes the popup**, and asserts the background service
+worker still fills the (mocked) Salesforce login form — guarding the exact bug that
+broke auto-login (login logic in the popup dies when the popup closes).
+
+Caveat: current stable Chrome blocks automating unpacked-extension pages, so the test
+needs a Chrome that still allows it (pin Chrome-for-Testing — see
+`.github/workflows/e2e.yml`, manual trigger). It is **not** part of `npm test` / the
+gating CI; until confirmed green there, the `chrome.*` path is still verified by a
+manual load-unpacked smoke test.
 
 ### Manual (popup + login automation)
 

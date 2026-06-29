@@ -24,3 +24,6 @@ coverage/
 .edge-certification-notes.txt
 sffav-vault.json
 *.vault.json
+
+# Puppeteer-managed browser downloads (e2e)
+chrome/

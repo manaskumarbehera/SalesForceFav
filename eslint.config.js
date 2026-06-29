@@ -86,6 +86,21 @@ module.exports = [
     },
   },
   {
+    // Background service worker. Runs in the SW context (chrome.*, self,
+    // importScripts) but also contains a function injected into the page
+    // (document/setTimeout), so include the browser globals too.
+    files: ["background.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "script",
+      globals: { ...browserGlobals, importScripts: "readonly" },
+    },
+    rules: {
+      "no-unused-vars": ["warn", { args: "none", caughtErrors: "none" }],
+      "no-empty": ["error", { allowEmptyCatch: true }],
+    },
+  },
+  {
     // Universal shared module — runs in the browser and in Node (jest).
     files: ["popup/credentials.js"],
     languageOptions: {
@@ -117,6 +132,20 @@ module.exports = [
       ecmaVersion: 2022,
       sourceType: "commonjs",
       globals: { ...browserGlobals, ...nodeGlobals, ...jestGlobals },
+    },
+    rules: {
+      "no-unused-vars": ["warn", { args: "none", caughtErrors: "none" }],
+    },
+  },
+  {
+    // E2E (Puppeteer) tests are ES modules and run page.evaluate callbacks in the
+    // browser, so they need both Node and browser globals. This block comes after
+    // the tests/** block so its module sourceType wins for these files.
+    files: ["tests/e2e/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...nodeGlobals, ...browserGlobals },
     },
     rules: {
       "no-unused-vars": ["warn", { args: "none", caughtErrors: "none" }],

@@ -26,8 +26,7 @@ See [Privacy Policy](./Privacy%20Policy.md).
 - **Backup & Restore** — export all credentials to a JSON file and import them back,
   with validation and automatic de-duplication.
 - **Light / Dark theme** — toggle and it's remembered.
-- **Color-coded favicons** — assign each credential a color so logged-in tabs are
-  instantly recognizable.
+- **Color tags** — give each org a color, shown on its card for quick recognition.
 - **Custom icon** — generated procedurally (`scripts/generate-icons.mjs`); no binary
   design assets to maintain.
 
@@ -70,9 +69,10 @@ To use **Incognito** logins, open the extension's **Details** page and enable
 ## How it works
 
 - Credentials are stored locally in the browser's `localStorage` as JSON.
-- On login, the extension opens the correct Salesforce URL, waits for the page to
-  load, then injects a script (`chrome.scripting`) to fill the login form and submit it.
-- After a successful login it recolors the favicon of all tabs on that org's origin.
+- On login, the **background service worker** opens the correct Salesforce URL, waits
+  for the page to load, then injects a script (`chrome.scripting`) to fill the login
+  form and submit it. (Running this in the worker — not the popup — is what makes
+  auto-fill reliable: opening a tab closes the popup.)
 
 > ⚠️ **Security note:** credentials (including passwords) are stored in plaintext in
 > the browser's local storage and never leave your machine. Use on trusted devices only.
