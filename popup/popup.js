@@ -119,6 +119,8 @@ function wireLock() {
   if (btn) btn.addEventListener("click", onLockSubmit);
   const bioUnlock = $("bioUnlock");
   if (bioUnlock) bioUnlock.addEventListener("click", biometricUnlock);
+  const lockReset = $("lockReset");
+  if (lockReset) lockReset.addEventListener("click", resetVault);
   const bioToggle = $("bioToggle");
   if (bioToggle) {
     bioToggle.addEventListener("click", () =>
@@ -149,6 +151,8 @@ function showLock(mode) {
   $("lockBtn").textContent = mode === "setup" ? "Enable encryption" : "Unlock";
   const bioUnlock = $("bioUnlock");
   if (bioUnlock) bioUnlock.hidden = !(mode === "unlock" && bioEnrolled());
+  const lockReset = $("lockReset");
+  if (lockReset) lockReset.hidden = mode !== "unlock";
   $("lockError").hidden = true;
   $("lockPass").value = "";
   $("lockPass2").value = "";
@@ -323,6 +327,27 @@ function updateBioButton() {
   btn.hidden = !show;
   btn.classList.toggle("on", bioEnrolled());
   btn.title = bioEnrolled() ? "Biometric unlock on — click to remove" : "Enable biometric unlock";
+}
+
+// Escape hatch for a forgotten passphrase: the encrypted data can't be decrypted
+// without it, so reset clears the vault (and biometric enrollment) and starts the
+// extension fresh, unencrypted. Destructive — guarded by a confirm.
+function resetVault() {
+  const msg =
+    "Forgot your passphrase?\n\nThe encrypted orgs can't be recovered without it. " +
+    "Reset will DELETE the encrypted vault and start fresh (you'll re-add your orgs).\n\n" +
+    "If you have a backup file you can restore it afterwards. Continue?";
+  if (!confirm(msg)) return;
+  localStorage.removeItem(VAULT_KEY);
+  localStorage.removeItem(BIO_KEY);
+  localStorage.removeItem(STORAGE_KEY);
+  state.passphrase = null;
+  state.credentials = [];
+  hideLock();
+  updateLockButton();
+  updateBioButton();
+  render();
+  toast("Vault reset — encryption is off");
 }
 
 function lock() {
