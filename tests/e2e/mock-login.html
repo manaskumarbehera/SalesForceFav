@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Mock Salesforce Login</title>
+  </head>
+  <body>
+    <!-- Mimics the Salesforce login form the extension targets: #username,
+         #password, #Login. The button is type=button and records the click
+         instead of navigating, so the e2e test can inspect the filled values. -->
+    <h1>Mock Salesforce Login</h1>
+    <input id="username" type="text" autocomplete="off" />
+    <input id="password" type="password" autocomplete="off" />
+    <input id="Login" type="button" value="Log In" />
+    <script>
+      window.__loginClicked = false;
+      document.getElementById("Login").addEventListener("click", () => {
+        window.__loginClicked = true;
+      });
+    </script>
+  </body>
+</html>

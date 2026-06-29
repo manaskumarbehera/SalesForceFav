@@ -1,0 +1,30 @@
+name: E2E (auto-login smoke)
+
+# Drives the REAL unpacked extension in Chrome to verify the background service
+# worker fills the Salesforce login form (the path jest/jsdom can't cover).
+#
+# Manual trigger only for now: current stable Chrome blocks automated extension
+# loading, so this pins a Chrome-for-Testing build that still supports it. Promote
+# to `on: [push, pull_request]` once it's confirmed green in CI.
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install a Chrome-for-Testing that allows extension automation
+        id: chrome
+        run: |
+          OUT=$(npx --yes @puppeteer/browsers install chrome@123.0.6312.122)
+          echo "path=$(echo "$OUT" | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+      - name: Run the auto-login smoke test
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.path }}
+        run: npm run test:e2e

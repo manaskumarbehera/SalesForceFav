@@ -104,10 +104,21 @@ npm run validate   # lint + test (what CI runs)
 
 Tests live in `tests/` and cover the pure logic in `popup/credentials.js`
 (URL resolution, validation, unique-name checks, immutable CRUD, hex→RGB, search,
-sort, and backup import/export/merge). There is no headless-browser test — the popup's
-DOM rendering, search, theme, and form can be spot-checked by serving the repo
-(`python3 -m http.server`) and opening `popup/popup.html`; the `chrome.*` login/launch
-path is verified by loading the unpacked extension manually.
+sort, and backup import/export/merge). The popup's DOM rendering can be spot-checked by
+serving the repo (`python3 -m http.server`) and opening `popup/popup.html`.
+
+#### E2E (`npm run test:e2e`) — the auto-login path
+
+`tests/e2e/smoke.mjs` (Puppeteer) loads the real unpacked extension, opens the popup,
+clicks launch, **immediately closes the popup**, and asserts the background service
+worker still fills the (mocked) Salesforce login form — guarding the exact bug that
+broke auto-login (login logic in the popup dies when the popup closes).
+
+Caveat: current stable Chrome blocks automating unpacked-extension pages, so the test
+needs a Chrome that still allows it (pin Chrome-for-Testing — see
+`.github/workflows/e2e.yml`, manual trigger). It is **not** part of `npm test` / the
+gating CI; until confirmed green there, the `chrome.*` path is still verified by a
+manual load-unpacked smoke test.
 
 ### Manual (popup + login automation)
 

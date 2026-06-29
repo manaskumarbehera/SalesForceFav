@@ -22,3 +22,6 @@ coverage/
 .env
 .env.local
 .edge-certification-notes.txt
+
+# Puppeteer-managed browser downloads (e2e)
+chrome/

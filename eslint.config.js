@@ -135,4 +135,18 @@ module.exports = [
       "no-unused-vars": ["warn", { args: "none", caughtErrors: "none" }],
     },
   },
+  {
+    // E2E (Puppeteer) tests are ES modules and run page.evaluate callbacks in the
+    // browser, so they need both Node and browser globals. This block comes after
+    // the tests/** block so its module sourceType wins for these files.
+    files: ["tests/e2e/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...nodeGlobals, ...browserGlobals },
+    },
+    rules: {
+      "no-unused-vars": ["warn", { args: "none", caughtErrors: "none" }],
+    },
+  },
 ];
