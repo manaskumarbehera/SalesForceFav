@@ -9,6 +9,11 @@ const {
   upsertCredential,
   removeCredential,
   hexToRgb,
+  base32Decode,
+  isValidTotpSecret,
+  hotp,
+  totp,
+  totpSecondsRemaining,
   filterCredentials,
   sortCredentials,
   togglePinAt,
@@ -186,6 +191,87 @@ describe("hexToRgb", () => {
   test("falls back to black for malformed input", () => {
     expect(hexToRgb("xyz")).toEqual([0, 0, 0]);
     expect(hexToRgb(null)).toEqual([0, 0, 0]);
+  });
+});
+
+describe("TOTP / 2FA (RFC 4226 + RFC 6238 vectors)", () => {
+  // RFC test secret: ASCII "12345678901234567890" → Base32 below.
+  const SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+
+  test("base32Decode recovers the RFC ASCII secret", () => {
+    const bytes = base32Decode(SECRET);
+    expect(Buffer.from(bytes).toString("ascii")).toBe("12345678901234567890");
+  });
+
+  test("base32Decode ignores spaces and padding", () => {
+    expect(Array.from(base32Decode("GEZD GNBV GY3T QOJQ ="))).toEqual(
+      Array.from(base32Decode("GEZDGNBVGY3TQOJQ"))
+    );
+  });
+
+  test("HOTP matches RFC 4226 Appendix D (counters 0–9)", () => {
+    const key = base32Decode(SECRET);
+    const expected = [
+      "755224",
+      "287082",
+      "359152",
+      "969429",
+      "338314",
+      "254676",
+      "287922",
+      "162583",
+      "399871",
+      "520489",
+    ];
+    expected.forEach((code, counter) => expect(hotp(key, counter, 6)).toBe(code));
+  });
+
+  test("TOTP matches RFC 6238 Appendix B (SHA-1, 8 digits)", () => {
+    const cases = [
+      [59, "94287082"],
+      [1111111109, "07081804"],
+      [1111111111, "14050471"],
+      [1234567890, "89005924"],
+      [2000000000, "69279037"],
+      [20000000000, "65353130"],
+    ];
+    for (const [time, code] of cases) {
+      expect(totp(SECRET, time, { digits: 8 })).toBe(code);
+    }
+  });
+
+  test("6-digit TOTP is the last 6 digits of the 8-digit code", () => {
+    expect(totp(SECRET, 59, { digits: 6 })).toBe("287082");
+  });
+
+  test("totp returns null for an empty/invalid secret", () => {
+    expect(totp("", 59)).toBeNull();
+    expect(totp("   ", 59)).toBeNull();
+  });
+
+  test("totpSecondsRemaining counts down within the 30s window", () => {
+    expect(totpSecondsRemaining(0)).toBe(30);
+    expect(totpSecondsRemaining(1)).toBe(29);
+    expect(totpSecondsRemaining(29)).toBe(1);
+    expect(totpSecondsRemaining(30)).toBe(30);
+  });
+
+  test("isValidTotpSecret accepts Base32 and rejects junk", () => {
+    expect(isValidTotpSecret(SECRET)).toBe(true);
+    expect(isValidTotpSecret("jbsw y3dp")).toBe(true);
+    expect(isValidTotpSecret("not-base32!")).toBe(false);
+    expect(isValidTotpSecret("")).toBe(false);
+  });
+});
+
+describe("validateCredential — TOTP", () => {
+  test("optional, but rejects a malformed secret", () => {
+    const base = { credentialName: "X", environment: "sandbox", username: "u", password: "p" };
+    expect(validateCredential({ ...base, totp: "" }, [], null).valid).toBe(true);
+    expect(validateCredential({ ...base, totp: "JBSWY3DPEHPK3PXP" }, [], null).valid).toBe(true);
+    const bad = validateCredential({ ...base, totp: "abc!!!" }, [], null);
+    expect(bad.valid).toBe(false);
+    expect(bad.errors.totp).toBeDefined();
   });
 });
 

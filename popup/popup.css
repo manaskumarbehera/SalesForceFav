@@ -299,6 +299,55 @@ html[data-theme="dark"] .env-sso {
   max-width: 120px;
 }
 
+/* ── live 2FA code chip ── */
+.totp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  font:
+    600 12.5px/1 "SF Mono",
+    "Roboto Mono",
+    ui-monospace,
+    monospace;
+  letter-spacing: 1px;
+}
+.totp-chip:hover {
+  border-color: var(--accent);
+}
+.totp-code {
+  font-variant-numeric: tabular-nums;
+}
+.totp-ring {
+  width: 22px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  position: relative;
+  overflow: hidden;
+}
+.totp-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--totp-pct, 100%);
+  background: var(--accent);
+  transition: width 0.95s linear;
+}
+.totp-chip.totp-expiring {
+  color: var(--danger);
+}
+.totp-chip.totp-expiring .totp-ring::after {
+  background: var(--danger);
+  transition: none;
+}
+
 /* ── form panel ── */
 .form-panel {
   margin: 0 12px 8px;

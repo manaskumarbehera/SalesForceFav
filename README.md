@@ -20,6 +20,9 @@ See [Privacy Policy](./Privacy%20Policy.md).
   (press <kbd>/</kbd> to jump to the search box).
 - **Pin & smart sort** — pin favorites to the top; the rest sort by most-recently used.
 - **Copy to clipboard** — one-click copy of a credential's username or password.
+- **Built-in 2FA (TOTP)** — store an org's authenticator key and the card shows a
+  **live 6-digit code with a countdown**, one-click to copy. Standard RFC 6238 codes,
+  computed locally (verified against the official RFC test vectors).
 - **Backup & Restore** — export all credentials to a JSON file and import them back,
   with validation and automatic de-duplication.
 - **Light / Dark theme** — toggle and it's remembered.
@@ -152,6 +155,7 @@ Store listing/privacy answers are in
 - [x] Copy username / password to clipboard.
 - [x] Light / dark theme.
 - [x] Extension icon + color-coded environment badges.
+- [x] Built-in TOTP/2FA code generator (RFC 6238) with live countdown + copy.
 - [x] Automated tests (Jest) and Chrome/Edge build.
 
 ### Missing features common to this kind of extension
@@ -163,7 +167,8 @@ Ideas that would make SalesForceFav stand out further — roughly highest-impact
 - [ ] **Encrypt credentials at rest** behind an optional master password (currently
       plaintext in `localStorage`).
 - [ ] **Encrypted backups** (password-protected export).
-- [ ] **TOTP / 2FA** code generation and autofill.
+- [ ] **TOTP / 2FA autofill** — codes are generated in-app today (copy to paste);
+      auto-typing the code into the Salesforce verification page is the next step.
 
 **Smarter login**
 

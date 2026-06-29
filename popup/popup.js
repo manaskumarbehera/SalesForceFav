@@ -23,7 +23,24 @@ document.addEventListener("DOMContentLoaded", function () {
   state.credentials = loadCredentials();
   wireToolbar();
   render();
+  updateTotpChips();
+  setInterval(updateTotpChips, 1000); // live 2FA codes + countdown
 });
+
+// Refresh every visible 2FA chip: current code (grouped "123 456") and a ring
+// that shrinks over the 30s window. Reads the secret from the element property.
+function updateTotpChips() {
+  const now = Date.now() / 1000;
+  const remaining = SFFav.totpSecondsRemaining(now);
+  document.querySelectorAll(".totp-chip").forEach((chip) => {
+    const value = SFFav.totp(chip._totpSecret, now);
+    const codeEl = chip.querySelector(".totp-code");
+    const ringEl = chip.querySelector(".totp-ring");
+    if (codeEl) codeEl.textContent = value ? `${value.slice(0, 3)} ${value.slice(3)}` : "––– –––";
+    if (ringEl) ringEl.style.setProperty("--totp-pct", `${(remaining / 30) * 100}%`);
+    chip.classList.toggle("totp-expiring", remaining <= 5);
+  });
+}
 
 // Paint the fixed toolbar/header icons (theme toggle is set by applyTheme).
 function paintStaticIcons() {
@@ -512,6 +529,30 @@ function buildCard(credential) {
 
   body.appendChild(meta);
 
+  // Live 2FA code chip (only when an authenticator key is stored). The secret is
+  // attached as a JS property — never as a DOM attribute — so it isn't exposed in
+  // the serialized HTML. updateTotpChips() refreshes the code/countdown each tick.
+  if (credential.totp && SFFav.isValidTotpSecret(credential.totp)) {
+    const chip = document.createElement("button");
+    chip.className = "totp-chip";
+    chip.type = "button";
+    chip.title = "Copy 2FA code";
+    chip._totpSecret = credential.totp;
+
+    const code = document.createElement("span");
+    code.className = "totp-code";
+    const ring = document.createElement("span");
+    ring.className = "totp-ring";
+    chip.appendChild(code);
+    chip.appendChild(ring);
+
+    chip.addEventListener("click", () => {
+      const value = SFFav.totp(chip._totpSecret, Date.now() / 1000);
+      if (value) copy(value, "2FA code copied");
+    });
+    body.appendChild(chip);
+  }
+
   card.appendChild(body);
 
   // Actions.
@@ -708,6 +749,7 @@ function openForm(editIndex) {
     $("username").value = cred.username || "";
     $("password").value = cred.password || "";
     $("faviconColor").value = cred.faviconColor || SFFav.DEFAULT_FAVICON_COLOR;
+    $("totp").value = cred.totp || "";
     $("pinned").checked = cred.pinned === true;
   }
   updateEnvFields(environment.value);
@@ -750,6 +792,7 @@ function onFormSubmit(event) {
     username: isSSO ? "" : $("username").value.trim(),
     password: isSSO ? "" : $("password").value,
     faviconColor: $("faviconColor").value,
+    totp: $("totp").value.trim(),
     pinned: $("pinned").checked,
     lastUsedAt: (editing && editing.lastUsedAt) || null,
   };
@@ -834,6 +877,9 @@ const formHtml = `
         <button type="button" id="pwToggle" class="icon-btn" aria-label="Show password"></button>
       </div>
     </div>
+
+    <label for="totp">Authenticator key (2FA) — optional</label>
+    <input type="text" id="totp" autocomplete="off" placeholder="Base32 secret from your authenticator" />
 
     <div class="form-row">
       <label for="faviconColor">Tab color</label>

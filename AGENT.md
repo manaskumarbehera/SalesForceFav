@@ -49,8 +49,13 @@ testable helpers live in `popup/credentials.js`.
 
 - **Storage:** credentials are persisted in `localStorage` under the `"credentials"`
   key as a JSON array. Each entry has `credentialName`, `environment`, `ssourl`,
-  `username`, `password`, `faviconColor`, `pinned`, and `lastUsedAt`. Theme is stored
-  under `"sffav-theme"`.
+  `username`, `password`, `faviconColor`, `totp` (optional Base32 2FA secret),
+  `pinned`, and `lastUsedAt`. Theme is stored under `"sffav-theme"`.
+- **2FA/TOTP:** `credentials.js` includes a dependency-free SHA-1 / HMAC-SHA1 /
+  Base32 implementation and `totp()` (RFC 6238), unit-tested against the official
+  RFC 4226/6238 vectors. The popup renders a live code chip and refreshes it on a
+  1s interval; the secret is held on the element as a JS property, never a DOM
+  attribute. Time is always passed into `totp()` so the logic stays deterministic.
 - **Rendering:** the popup keeps an in-memory `state` and re-renders the list through
   `SFFav.filterCredentials` → `SFFav.sortCredentials`. Credential-derived strings are
   written with `textContent` only (never `innerHTML`) — an imported backup file is

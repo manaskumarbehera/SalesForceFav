@@ -94,6 +94,11 @@
       }
     }
 
+    // TOTP secret is optional, but if present it must be valid Base32.
+    if (c.totp && String(c.totp).trim() && !isValidTotpSecret(c.totp)) {
+      errors.totp = "Authenticator key must be a Base32 secret (A–Z, 2–7).";
+    }
+
     return { valid: Object.keys(errors).length === 0, errors };
   }
 
@@ -121,6 +126,168 @@
     if (!/^[0-9a-fA-F]{6}$/.test(value)) return [0, 0, 0];
     const bigint = parseInt(value, 16);
     return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
+  }
+
+  // ── TOTP (RFC 6238) authenticator ────────────────────────────────────────
+  // Pure, dependency-free SHA-1 / HMAC-SHA1 / Base32 so 2FA codes are computed
+  // locally and the implementation is unit-testable against the published RFC
+  // 4226 / 6238 vectors. Time is always passed in (never Date.now() here) so the
+  // module stays deterministic.
+
+  const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+  // Decode an RFC 4648 Base32 secret to bytes. Spaces and padding are ignored;
+  // characters outside the alphabet are skipped (authenticator apps print the
+  // secret in spaced groups).
+  function base32Decode(input) {
+    const clean = String(input || "")
+      .toUpperCase()
+      .replace(/=+$/, "");
+    let bits = 0;
+    let value = 0;
+    const out = [];
+    for (const ch of clean) {
+      const idx = BASE32_ALPHABET.indexOf(ch);
+      if (idx < 0) continue;
+      value = (value << 5) | idx;
+      bits += 5;
+      if (bits >= 8) {
+        out.push((value >>> (bits - 8)) & 0xff);
+        bits -= 8;
+      }
+    }
+    return new Uint8Array(out);
+  }
+
+  // A Base32 secret is valid if, ignoring spaces/padding, it is non-empty and
+  // contains only alphabet characters.
+  function isValidTotpSecret(input) {
+    const clean = String(input || "")
+      .toUpperCase()
+      .replace(/[\s=]+/g, "");
+    return clean.length > 0 && /^[A-Z2-7]+$/.test(clean);
+  }
+
+  function sha1(bytes) {
+    const ml = bytes.length * 8;
+    const total = (((bytes.length + 8) >> 6) + 1) << 6; // 64-byte blocks incl. 0x80 + length
+    const msg = new Uint8Array(total);
+    msg.set(bytes);
+    msg[bytes.length] = 0x80;
+    const dv = new DataView(msg.buffer);
+    dv.setUint32(total - 8, Math.floor(ml / 0x100000000));
+    dv.setUint32(total - 4, ml >>> 0);
+
+    let h0 = 0x67452301,
+      h1 = 0xefcdab89,
+      h2 = 0x98badcfe,
+      h3 = 0x10325476,
+      h4 = 0xc3d2e1f0;
+    const w = new Int32Array(80);
+    for (let i = 0; i < total; i += 64) {
+      for (let j = 0; j < 16; j++) w[j] = dv.getInt32(i + j * 4);
+      for (let j = 16; j < 80; j++) {
+        const n = w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16];
+        w[j] = (n << 1) | (n >>> 31);
+      }
+      let a = h0,
+        b = h1,
+        c = h2,
+        d = h3,
+        e = h4;
+      for (let j = 0; j < 80; j++) {
+        let f, k;
+        if (j < 20) {
+          f = (b & c) | (~b & d);
+          k = 0x5a827999;
+        } else if (j < 40) {
+          f = b ^ c ^ d;
+          k = 0x6ed9eba1;
+        } else if (j < 60) {
+          f = (b & c) | (b & d) | (c & d);
+          k = 0x8f1bbcdc;
+        } else {
+          f = b ^ c ^ d;
+          k = 0xca62c1d6;
+        }
+        const t = (((a << 5) | (a >>> 27)) + f + e + k + w[j]) | 0;
+        e = d;
+        d = c;
+        c = (b << 30) | (b >>> 2);
+        b = a;
+        a = t;
+      }
+      h0 = (h0 + a) | 0;
+      h1 = (h1 + b) | 0;
+      h2 = (h2 + c) | 0;
+      h3 = (h3 + d) | 0;
+      h4 = (h4 + e) | 0;
+    }
+    const out = new Uint8Array(20);
+    new DataView(out.buffer).setInt32(0, h0);
+    new DataView(out.buffer).setInt32(4, h1);
+    new DataView(out.buffer).setInt32(8, h2);
+    new DataView(out.buffer).setInt32(12, h3);
+    new DataView(out.buffer).setInt32(16, h4);
+    return out;
+  }
+
+  function hmacSha1(key, message) {
+    const block = 64;
+    let k = key.length > block ? sha1(key) : key;
+    const padded = new Uint8Array(block);
+    padded.set(k);
+    const ipad = new Uint8Array(block);
+    const opad = new Uint8Array(block);
+    for (let i = 0; i < block; i++) {
+      ipad[i] = padded[i] ^ 0x36;
+      opad[i] = padded[i] ^ 0x5c;
+    }
+    const inner = sha1(concatBytes(ipad, message));
+    return sha1(concatBytes(opad, inner));
+  }
+
+  function concatBytes(a, b) {
+    const out = new Uint8Array(a.length + b.length);
+    out.set(a);
+    out.set(b, a.length);
+    return out;
+  }
+
+  // RFC 4226 HOTP for a key (bytes) and counter, zero-padded to `digits`.
+  function hotp(keyBytes, counter, digits) {
+    const d = digits || 6;
+    const msg = new Uint8Array(8);
+    let c = counter;
+    for (let i = 7; i >= 0; i--) {
+      msg[i] = c & 0xff;
+      c = Math.floor(c / 256);
+    }
+    const hash = hmacSha1(keyBytes, msg);
+    const offset = hash[19] & 0x0f;
+    const bin =
+      ((hash[offset] & 0x7f) << 24) |
+      ((hash[offset + 1] & 0xff) << 16) |
+      ((hash[offset + 2] & 0xff) << 8) |
+      (hash[offset + 3] & 0xff);
+    return String(bin % 10 ** d).padStart(d, "0");
+  }
+
+  // RFC 6238 TOTP. `timeSeconds` is the Unix time (passed in for determinism).
+  // Returns the code string, or null if the secret is empty/invalid.
+  function totp(secretBase32, timeSeconds, opts) {
+    const step = (opts && opts.step) || 30;
+    const digits = (opts && opts.digits) || 6;
+    const key = base32Decode(secretBase32);
+    if (key.length === 0) return null;
+    const counter = Math.floor(timeSeconds / step);
+    return hotp(key, counter, digits);
+  }
+
+  // Seconds left in the current TOTP window (for the countdown UI).
+  function totpSecondsRemaining(timeSeconds, step) {
+    const s = step || 30;
+    return s - (Math.floor(timeSeconds) % s);
   }
 
   // Case-insensitive filter across name, environment, username, and SSO URL.
@@ -197,6 +364,7 @@
       username: raw.username || "",
       password: raw.password || "",
       faviconColor: raw.faviconColor || DEFAULT_FAVICON_COLOR,
+      totp: typeof raw.totp === "string" ? raw.totp : "",
       pinned: raw.pinned === true,
       lastUsedAt: typeof raw.lastUsedAt === "number" ? raw.lastUsedAt : null,
     };
@@ -258,6 +426,11 @@
     upsertCredential,
     removeCredential,
     hexToRgb,
+    base32Decode,
+    isValidTotpSecret,
+    hotp,
+    totp,
+    totpSecondsRemaining,
     filterCredentials,
     sortCredentials,
     togglePinAt,
