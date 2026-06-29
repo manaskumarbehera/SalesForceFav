@@ -159,6 +159,47 @@
     return new Uint8Array(out);
   }
 
+  // Encode bytes to an (unpadded) RFC 4648 Base32 secret. Inverse of base32Decode
+  // for whole-byte inputs — used to provision a brand-new authenticator secret.
+  function base32Encode(bytes) {
+    const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+    let bits = 0;
+    let value = 0;
+    let out = "";
+    for (let i = 0; i < arr.length; i += 1) {
+      value = (value << 8) | arr[i];
+      bits += 8;
+      while (bits >= 5) {
+        out += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+        bits -= 5;
+      }
+    }
+    if (bits > 0) out += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+    return out;
+  }
+
+  // Build an otpauth:// provisioning URI (what authenticator apps and QR codes
+  // encode), so SalesForceFav can hand a new secret to another app — or be the
+  // authenticator itself. period/digits default to the TOTP standard.
+  function buildOtpauthUri(opts) {
+    const o = opts || {};
+    const issuer = o.issuer || "SalesForceFav";
+    const account = o.account || "account";
+    // Conventional otpauth label is "Issuer:Account" with a literal colon; each
+    // side is URL-encoded individually (Google Authenticator format).
+    const label = `${encodeURIComponent(issuer)}:${encodeURIComponent(account)}`;
+    const params = new URLSearchParams({
+      secret: String(o.secret || "")
+        .replace(/\s/g, "")
+        .toUpperCase(),
+      issuer,
+      algorithm: "SHA1",
+      digits: String(o.digits || 6),
+      period: String(o.period || 30),
+    });
+    return `otpauth://totp/${label}?${params.toString()}`;
+  }
+
   // A Base32 secret is valid if, ignoring spaces/padding, it is non-empty and
   // contains only alphabet characters.
   function isValidTotpSecret(input) {
@@ -427,6 +468,8 @@
     removeCredential,
     hexToRgb,
     base32Decode,
+    base32Encode,
+    buildOtpauthUri,
     isValidTotpSecret,
     hotp,
     totp,

@@ -27,6 +27,7 @@ const browserGlobals = {
   clearInterval: "readonly",
   Promise: "readonly",
   URL: "readonly",
+  URLSearchParams: "readonly",
   Uint8Array: "readonly",
   Int32Array: "readonly",
   DataView: "readonly",

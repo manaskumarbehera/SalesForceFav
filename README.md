@@ -127,7 +127,6 @@ npm link          # exposes `sffav` (or use: npm run cli -- <args>)
 sffav init                                   # create an encrypted vault (prompts for a passphrase)
 sffav add --name "Acme Prod" --env production --username me@acme.com --password '…' --totp BASE32KEY
 sffav list                                   # list orgs (no secrets printed)
-sffav totp "Acme Prod"                       # print the current 2FA code + seconds left
 sffav url  "Acme Prod"                        # the login URL for the org
 sffav export backup.json                     # extension-compatible backup (PLAINTEXT — warns)
 sffav import backup.json                     # merge a backup into the vault
@@ -135,6 +134,32 @@ sffav import backup.json                     # merge a backup into the vault
 
 The master passphrase comes from an interactive hidden prompt or `SFFAV_PASSPHRASE`.
 The vault path defaults to `./sffav-vault.json` (override with `--vault` or `$SFFAV_VAULT`).
+
+### Built-in authenticator (2FA)
+
+The CLI can **be its own authenticator** — generate a TOTP secret, store it, and print
+the `otpauth://` URI to register the _same_ secret with Salesforce (or another app):
+
+```bash
+sffav totp "Acme Prod" --new          # generate a fresh key + print its otpauth:// URI
+sffav totp "Acme Prod" --set BASE32   # attach/replace an existing authenticator key
+sffav totp "Acme Prod" --uri          # print the otpauth:// URI (turn into a QR for your phone)
+sffav totp "Acme Prod"                # the current 6-digit code + seconds left
+sffav totp "Acme Prod" --raw          # just the 6 digits (for scripts/agents)
+```
+
+### Agents / CI (non-interactive)
+
+An automated agent can pull a live MFA code without any prompt — set the passphrase in
+the environment and use `--raw`:
+
+```bash
+export SFFAV_PASSPHRASE="…"
+CODE=$(sffav totp "Acme Prod" --raw)        # 6 digits, ready to type into Salesforce MFA
+```
+
+(Username/password for scripted login can be read from `sffav export` — which is
+plaintext, so treat that file as a secret.)
 
 ### How "not plaintext" works
 

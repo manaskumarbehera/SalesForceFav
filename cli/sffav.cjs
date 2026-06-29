@@ -12,6 +12,10 @@
 //   sffav add --name "Prod" --env production --username u --password p [--totp KEY] [--color #2563eb]
 //   sffav list                 list orgs (no secrets printed)
 //   sffav totp "Prod"          print the current 2FA code + seconds left
+//     --raw                    print only the 6 digits (for agents / scripts)
+//     --set <BASE32>           attach/replace the authenticator key
+//     --new                    generate a fresh key (be your own authenticator)
+//     --uri                    print the otpauth:// URI (QR / another app)
 //   sffav url "Prod"           print the login URL for the org
 //   sffav rm "Prod"            remove an org
 //   sffav export <file>        write a PLAINTEXT backup (extension-compatible) — warns
@@ -21,6 +25,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const readline = require("node:readline");
 const SFFav = require("../popup/credentials.js");
 const { encryptVault, decryptVault } = require("./vault.cjs");
@@ -156,16 +161,46 @@ const commands = {
     }
   },
 
+  // 2FA management + code generation. Flags:
+  //   --set <base32>  attach/replace the authenticator key
+  //   --new           generate a brand-new key (be your own authenticator)
+  //   --uri           print the otpauth:// provisioning URI (for a QR / another app)
+  //   --raw           print only the 6 digits (for agents / scripts)
   async totp() {
-    const name = positionals[0] || die("usage: sffav totp <name>");
-    const { data } = await loadVault();
+    const name =
+      positionals[0] || die("usage: sffav totp <name> [--set KEY | --new | --uri | --raw]");
+    const { data, pass } = await loadVault();
     const idx = findIndex(data.credentials, name);
     if (idx < 0) die(`no org named "${name}".`);
-    const secret = data.credentials[idx].totp;
-    if (!secret) die(`"${name}" has no authenticator key.`);
-    const code = SFFav.totp(secret, Date.now() / 1000);
+    const cred = data.credentials[idx];
+
+    // --set / --new mutate the stored secret.
+    if (typeof flags.set === "string" || flags.new) {
+      const secret = flags.new
+        ? SFFav.base32Encode(crypto.randomBytes(20)) // 160-bit secret (RFC 6238 §5.1)
+        : flags.set.replace(/\s/g, "").toUpperCase();
+      if (!SFFav.isValidTotpSecret(secret)) die("not a valid Base32 authenticator key.");
+      data.credentials[idx] = { ...cred, totp: secret };
+      saveVault(data, pass);
+      const uri = SFFav.buildOtpauthUri({ account: cred.username || name, secret });
+      out(`Authenticator ${flags.new ? "generated" : "set"} for "${name}".`);
+      if (flags.new) out(`  secret: ${secret}`);
+      out(`  otpauth: ${uri}`);
+      return;
+    }
+
+    if (!cred.totp) die(`"${name}" has no authenticator key (add one with --set or --new).`);
+
+    if (flags.uri) {
+      out(SFFav.buildOtpauthUri({ account: cred.username || name, secret: cred.totp }));
+      return;
+    }
+
+    const code = SFFav.totp(cred.totp, Date.now() / 1000);
     if (!code) die("could not compute a code (invalid secret).");
-    out(`${code}   (expires in ${SFFav.totpSecondsRemaining(Date.now() / 1000)}s)`);
+    if (flags.raw)
+      out(code); // machine-friendly: just the digits
+    else out(`${code}   (expires in ${SFFav.totpSecondsRemaining(Date.now() / 1000)}s)`);
   },
 
   async url() {
@@ -210,7 +245,7 @@ const commands = {
       fs
         .readFileSync(__filename, "utf8")
         .split("\n")
-        .slice(3, 24)
+        .slice(3, 28)
         .join("\n")
         .replace(/^\/\/ ?/gm, "")
     );

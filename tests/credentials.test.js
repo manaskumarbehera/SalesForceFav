@@ -10,6 +10,8 @@ const {
   removeCredential,
   hexToRgb,
   base32Decode,
+  base32Encode,
+  buildOtpauthUri,
   isValidTotpSecret,
   hotp,
   totp,
@@ -207,6 +209,25 @@ describe("TOTP / 2FA (RFC 4226 + RFC 6238 vectors)", () => {
     expect(Array.from(base32Decode("GEZD GNBV GY3T QOJQ ="))).toEqual(
       Array.from(base32Decode("GEZDGNBVGY3TQOJQ"))
     );
+  });
+
+  test("base32Encode is the inverse of decode (and matches the RFC secret)", () => {
+    const ascii = Buffer.from("12345678901234567890", "ascii");
+    expect(base32Encode(ascii)).toBe(SECRET);
+    // round-trip any byte sequence
+    const bytes = base32Decode(SECRET);
+    expect(Array.from(base32Decode(base32Encode(bytes)))).toEqual(Array.from(bytes));
+  });
+
+  test("buildOtpauthUri produces a valid provisioning URI a code can be derived from", () => {
+    const uri = buildOtpauthUri({ account: "me@acme.com", secret: SECRET });
+    expect(uri.startsWith("otpauth://totp/SalesForceFav:me%40acme.com?")).toBe(true);
+    const u = new URL(uri);
+    expect(u.searchParams.get("secret")).toBe(SECRET);
+    expect(u.searchParams.get("issuer")).toBe("SalesForceFav");
+    expect(u.searchParams.get("period")).toBe("30");
+    // the secret in the URI yields the same code as the raw secret
+    expect(totp(u.searchParams.get("secret"), 59)).toBe(totp(SECRET, 59));
   });
 
   test("HOTP matches RFC 4226 Appendix D (counters 0–9)", () => {
