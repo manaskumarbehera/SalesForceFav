@@ -4,7 +4,11 @@
   "private": true,
   "description": "SalesForceFav — a Manifest V3 Chrome/Edge extension that stores Salesforce credentials and automates login.",
   "type": "commonjs",
+  "bin": {
+    "sffav": "cli/sffav.cjs"
+  },
   "scripts": {
+    "cli": "node cli/sffav.cjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{js,css,html,json,md}\" --ignore-path .prettierignore",

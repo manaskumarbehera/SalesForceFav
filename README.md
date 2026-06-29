@@ -87,7 +87,10 @@ popup/
   popup.css               # Popup styles (light/dark themes)
   popup.js                # DOM, chrome.* and login automation (side effects)
   credentials.js          # Pure, unit-tested logic (SFFav): validate/search/sort/import
-tests/                    # Jest unit tests
+cli/
+  sffav.cjs               # Companion CLI (reuses credentials.js)
+  vault.cjs               # AES-256-GCM encrypted vault (PBKDF2-SHA256)
+tests/                    # Jest unit tests (credentials + vault)
 scripts/build.mjs         # Stages runtime files into dist/
 scripts/generate-icons.mjs# Regenerates the PNG icons (no external deps)
 build.sh                  # Builds + zips Chrome/Edge packages
@@ -112,6 +115,40 @@ A single Manifest V3 build serves both the **Chrome Web Store** and the
 **Microsoft Edge Add-ons** store. CI (`.github/workflows/ci.yml`) runs lint, tests,
 and a build on every push. For contributor and AI-agent guidance see
 [AGENT.md](./AGENT.md).
+
+## CLI + encrypted vault
+
+A companion Node CLI (`sffav`) manages your logins from the terminal and — unlike the
+extension's `localStorage` — keeps them in an **encrypted vault**, never plaintext.
+
+```bash
+npm link          # exposes `sffav` (or use: npm run cli -- <args>)
+
+sffav init                                   # create an encrypted vault (prompts for a passphrase)
+sffav add --name "Acme Prod" --env production --username me@acme.com --password '…' --totp BASE32KEY
+sffav list                                   # list orgs (no secrets printed)
+sffav totp "Acme Prod"                       # print the current 2FA code + seconds left
+sffav url  "Acme Prod"                        # the login URL for the org
+sffav export backup.json                     # extension-compatible backup (PLAINTEXT — warns)
+sffav import backup.json                     # merge a backup into the vault
+```
+
+The master passphrase comes from an interactive hidden prompt or `SFFAV_PASSPHRASE`.
+The vault path defaults to `./sffav-vault.json` (override with `--vault` or `$SFFAV_VAULT`).
+
+### How "not plaintext" works
+
+- The vault is sealed with **AES-256-GCM**; the key is derived from your passphrase via
+  **PBKDF2-SHA256 (210k iterations)** with a random salt. A random IV is used per save.
+- GCM is **authenticated** — a wrong passphrase or any tampering makes the decrypt
+  _fail_ rather than return garbage. The passphrase is never stored.
+- The vault file contains only `salt`, `iv`, `tag`, and the ciphertext — **no plaintext
+  credentials** (there's a unit test asserting exactly that).
+- See `cli/vault.cjs`; the same approach (via the browser's WebCrypto) is the planned
+  path to encrypting the extension's own storage — see the roadmap.
+
+> The extension popup still stores credentials in `localStorage` in plaintext today;
+> the CLI vault is the secure-storage model we'll bring to the extension next.
 
 ## Publishing (Chrome Web Store + Edge Add-ons)
 
@@ -164,9 +201,10 @@ Ideas that would make SalesForceFav stand out further — roughly highest-impact
 
 **Security**
 
-- [ ] **Encrypt credentials at rest** behind an optional master password (currently
-      plaintext in `localStorage`).
-- [ ] **Encrypted backups** (password-protected export).
+- [x] **Encrypted vault in the CLI** (AES-256-GCM + PBKDF2-SHA256) — see `cli/`.
+- [ ] **Encrypt the extension's storage** at rest behind a master password (the CLI
+      vault is the model; bring it to the popup via WebCrypto).
+- [ ] **Encrypted backups** (password-protected export from the extension).
 - [ ] **TOTP / 2FA autofill** — codes are generated in-app today (copy to paste);
       auto-typing the code into the Salesforce verification page is the next step.
 

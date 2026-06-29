@@ -44,6 +44,7 @@ const nodeGlobals = {
   process: "readonly",
   Buffer: "readonly",
   __dirname: "readonly",
+  __filename: "readonly",
   console: "readonly",
   global: "writable",
   fetch: "readonly",

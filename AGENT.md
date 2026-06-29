@@ -31,7 +31,10 @@ popup/
   popup.css               # Popup styling (light/dark via [data-theme])
   popup.js                # DOM, chrome.* and login automation (side effects)
   credentials.js          # Pure, unit-tested logic (SFFav): validate/search/sort/import
-tests/                    # Jest unit tests for credentials.js
+cli/                      # Companion Node CLI (reuses credentials.js)
+  sffav.cjs               # Commands: init/add/list/totp/url/rm/export/import
+  vault.cjs               # AES-256-GCM + PBKDF2 encrypted vault (NOT plaintext)
+tests/                    # Jest unit tests (credentials + vault)
 scripts/build.mjs         # Stages runtime files into dist/
 scripts/generate-icons.mjs# Regenerates icons/ PNGs (zlib, no deps)
 build.sh                  # Builds + zips Chrome/Edge store packages

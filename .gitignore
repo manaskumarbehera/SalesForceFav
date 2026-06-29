@@ -22,3 +22,5 @@ coverage/
 .env
 .env.local
 .edge-certification-notes.txt
+sffav-vault.json
+*.vault.json
