@@ -210,15 +210,17 @@ async function main() {
     log("PASS — service worker filled username + password and clicked Login");
 
     // The service worker should also recolor the tab's favicon — wait for the
-    // <link rel=icon> href to change from the mock's known initial 1x1 PNG.
-    const MOCK_FAVICON_PREFIX = "data:image/png;base64,iVBORw0KGgoAAAANS"; // mock's 1x1
+    // <link rel=icon> href to differ from the mock's exact initial 1x1 PNG.
+    // (Compare the FULL value, not a prefix: all PNGs share the same header.)
+    const MOCK_FAVICON =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
     await sfPage.waitForFunction(
       (init) => {
         const l = document.querySelector("link[rel*='icon']");
-        return l && l.href.startsWith("data:image") && !l.href.startsWith(init);
+        return l && l.href.startsWith("data:image") && l.href !== init;
       },
       { timeout: 10000 },
-      MOCK_FAVICON_PREFIX
+      MOCK_FAVICON
     );
     log("PASS — service worker recolored the favicon");
   } finally {
