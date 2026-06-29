@@ -20,9 +20,11 @@ See [Privacy Policy](./Privacy%20Policy.md).
   (press <kbd>/</kbd> to jump to the search box).
 - **Pin & smart sort** — pin favorites to the top; the rest sort by most-recently used.
 - **Copy to clipboard** — one-click copy of a credential's username or password.
-- **Built-in 2FA (TOTP)** — store an org's authenticator key and the card shows a
-  **live 6-digit code with a countdown**, one-click to copy. Standard RFC 6238 codes,
-  computed locally (verified against the official RFC test vectors).
+- **Built-in 2FA (TOTP)** — store (or **generate**) an org's authenticator key and the
+  card shows a **live 6-digit code with a countdown**, one-click to copy. The add/edit
+  form can mint a new key and reveal its `otpauth://` setup link, so SalesForceFav can
+  be **its own authenticator**. Standard RFC 6238 codes, computed locally (verified
+  against the official RFC test vectors).
 - **Backup & Restore** — export all credentials to a JSON file and import them back,
   with validation and automatic de-duplication.
 - **Light / Dark theme** — toggle and it's remembered.

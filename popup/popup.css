@@ -402,6 +402,52 @@ html[data-theme="dark"] .env-sso {
 .pw-wrap input {
   flex: 1;
 }
+.totp-field {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.totp-field input {
+  flex: 1;
+}
+.totp-field .btn {
+  width: auto;
+  height: auto;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.totp-setup {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.totp-setup-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.totp-setup-key {
+  font:
+    600 13px/1.3 "SF Mono",
+    ui-monospace,
+    monospace;
+  letter-spacing: 1px;
+  color: var(--accent);
+  word-break: break-all;
+}
+.totp-setup .btn {
+  align-self: flex-start;
+  width: auto;
+  height: auto;
+  padding: 6px 10px;
+  font-size: 12px;
+}
 .form-row {
   display: flex;
   align-items: center;

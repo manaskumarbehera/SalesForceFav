@@ -504,6 +504,37 @@ function openForm(editIndex) {
     });
   }
 
+  // Authenticator (2FA): SalesForceFav can be its own authenticator — "New"
+  // generates a fresh Base32 secret; the setup row reveals the key + an
+  // otpauth:// link to register the same secret with Salesforce or a phone.
+  const totp = $("totp");
+  const totpSetup = $("totpSetup");
+  const totpSetupKey = $("totpSetupKey");
+  const showTotpSetup = () => {
+    const secret = totp.value.trim();
+    if (secret && SFFav.isValidTotpSecret(secret)) {
+      totpSetupKey.textContent = secret.replace(/(.{4})/g, "$1 ").trim();
+      totpSetup.hidden = false;
+    } else {
+      totpSetup.hidden = true;
+    }
+  };
+  $("totpGen").addEventListener("click", () => {
+    const bytes = new Uint8Array(20); // 160-bit secret (RFC 6238 §5.1)
+    crypto.getRandomValues(bytes);
+    totp.value = SFFav.base32Encode(bytes);
+    showTotpSetup();
+    toast("New authenticator key generated");
+  });
+  totp.addEventListener("input", showTotpSetup);
+  $("totpCopyUri").addEventListener("click", () => {
+    const uri = SFFav.buildOtpauthUri({
+      account: $("username").value.trim() || $("credentialName").value.trim() || "account",
+      secret: totp.value.trim(),
+    });
+    copy(uri, "Setup link copied");
+  });
+
   // Populate when editing (values set via .value — not innerHTML).
   if (cred) {
     $("title").textContent = "Edit org";
@@ -514,6 +545,7 @@ function openForm(editIndex) {
     $("password").value = cred.password || "";
     $("faviconColor").value = cred.faviconColor || SFFav.DEFAULT_FAVICON_COLOR;
     $("totp").value = cred.totp || "";
+    showTotpSetup();
     $("pinned").checked = cred.pinned === true;
   }
   updateEnvFields(environment.value);
@@ -643,7 +675,15 @@ const formHtml = `
     </div>
 
     <label for="totp">Authenticator key (2FA) — optional</label>
-    <input type="text" id="totp" autocomplete="off" placeholder="Base32 secret from your authenticator" />
+    <div class="totp-field">
+      <input type="text" id="totp" autocomplete="off" placeholder="Base32 secret from your authenticator" />
+      <button type="button" id="totpGen" class="btn" title="Generate a new key">New</button>
+    </div>
+    <div id="totpSetup" class="totp-setup" hidden>
+      <span class="totp-setup-label">Setup key — add this to Salesforce or your phone:</span>
+      <code id="totpSetupKey" class="totp-setup-key"></code>
+      <button type="button" id="totpCopyUri" class="btn">Copy setup link</button>
+    </div>
 
     <div class="form-row">
       <label for="faviconColor">Tab color</label>
