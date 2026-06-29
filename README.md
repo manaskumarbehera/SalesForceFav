@@ -22,9 +22,10 @@ See [Privacy Policy](./Privacy%20Policy.md).
 - **Copy to clipboard** — one-click copy of a credential's username or password.
 - **Built-in 2FA (TOTP)** — store (or **generate**) an org's authenticator key and the
   card shows a **live 6-digit code with a countdown**, one-click to copy. The add/edit
-  form can mint a new key and reveal its `otpauth://` setup link, so SalesForceFav can
-  be **its own authenticator**. Standard RFC 6238 codes, computed locally (verified
-  against the official RFC test vectors).
+  form shows a **scannable QR code** (rendered locally — the secret never leaves the
+  browser) plus **Copy key** / **Copy setup link**, so you can register the org's 2FA
+  with your phone or Salesforce — SalesForceFav can be **its own authenticator**.
+  Standard RFC 6238 codes, verified against the official RFC test vectors.
 - **Backup & Restore** — export all credentials to a JSON file and import them back,
   with validation and automatic de-duplication.
 - **Light / Dark theme** — toggle and it's remembered.

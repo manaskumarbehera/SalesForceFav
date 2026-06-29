@@ -32,6 +32,7 @@ popup/
   popup.css               # Popup styling (light/dark via [data-theme])
   popup.js                # DOM, chrome.* and login automation (side effects)
   credentials.js          # Pure, unit-tested logic (SFFav): validate/search/sort/import
+  vendor/qrcode.js        # Vendored qrcode-generator (MIT); 2FA setup QR; lint/format-ignored
 cli/                      # Companion Node CLI (reuses credentials.js)
   sffav.cjs               # Commands: init/add/list/totp/url/rm/export/import
   vault.cjs               # AES-256-GCM + PBKDF2 encrypted vault (NOT plaintext)

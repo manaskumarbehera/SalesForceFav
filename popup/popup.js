@@ -510,14 +510,33 @@ function openForm(editIndex) {
   const totp = $("totp");
   const totpSetup = $("totpSetup");
   const totpSetupKey = $("totpSetupKey");
+  const totpQr = $("totpQr");
+  // Build the otpauth:// URI for the current secret (account = username/name).
+  const currentOtpauthUri = () =>
+    SFFav.buildOtpauthUri({
+      account: $("username").value.trim() || $("credentialName").value.trim() || "account",
+      secret: totp.value.trim(),
+    });
   const showTotpSetup = () => {
     const secret = totp.value.trim();
-    if (secret && SFFav.isValidTotpSecret(secret)) {
-      totpSetupKey.textContent = secret.replace(/(.{4})/g, "$1 ").trim();
-      totpSetup.hidden = false;
-    } else {
+    if (!secret || !SFFav.isValidTotpSecret(secret)) {
       totpSetup.hidden = true;
+      totpQr.innerHTML = "";
+      return;
     }
+    totpSetupKey.textContent = secret.replace(/(.{4})/g, "$1 ").trim();
+    // Render the QR locally (the secret never leaves the browser). The SVG is
+    // built from static rects by the vendored encoder — safe to inject.
+    try {
+      const qr = qrcode(0, "M"); // type 0 = auto-size, error-correction level M
+      qr.addData(currentOtpauthUri());
+      qr.make();
+      totpQr.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+    } catch (e) {
+      totpQr.innerHTML = "";
+      console.error("QR render failed:", e);
+    }
+    totpSetup.hidden = false;
   };
   $("totpGen").addEventListener("click", () => {
     const bytes = new Uint8Array(20); // 160-bit secret (RFC 6238 §5.1)
@@ -527,13 +546,8 @@ function openForm(editIndex) {
     toast("New authenticator key generated");
   });
   totp.addEventListener("input", showTotpSetup);
-  $("totpCopyUri").addEventListener("click", () => {
-    const uri = SFFav.buildOtpauthUri({
-      account: $("username").value.trim() || $("credentialName").value.trim() || "account",
-      secret: totp.value.trim(),
-    });
-    copy(uri, "Setup link copied");
-  });
+  $("totpCopyKey").addEventListener("click", () => copy(totp.value.trim(), "Key copied"));
+  $("totpCopyUri").addEventListener("click", () => copy(currentOtpauthUri(), "Setup link copied"));
 
   // Populate when editing (values set via .value — not innerHTML).
   if (cred) {
@@ -680,9 +694,19 @@ const formHtml = `
       <button type="button" id="totpGen" class="btn" title="Generate a new key">New</button>
     </div>
     <div id="totpSetup" class="totp-setup" hidden>
-      <span class="totp-setup-label">Setup key — add this to Salesforce or your phone:</span>
-      <code id="totpSetupKey" class="totp-setup-key"></code>
-      <button type="button" id="totpCopyUri" class="btn">Copy setup link</button>
+      <p class="totp-setup-title">Scan to add this org's 2FA</p>
+      <p class="totp-setup-hint">
+        Scan with your phone's authenticator, or in Salesforce choose "use an
+        authenticator app" and enter the key below.
+      </p>
+      <div id="totpQr" class="totp-qr" aria-label="2FA setup QR code"></div>
+      <div class="totp-setup-keyrow">
+        <code id="totpSetupKey" class="totp-setup-key"></code>
+      </div>
+      <div class="totp-setup-actions">
+        <button type="button" id="totpCopyKey" class="btn">Copy key</button>
+        <button type="button" id="totpCopyUri" class="btn">Copy setup link</button>
+      </div>
     </div>
 
     <div class="form-row">

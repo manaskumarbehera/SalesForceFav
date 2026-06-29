@@ -38,6 +38,8 @@ const browserGlobals = {
   globalThis: "readonly",
   // Shared module (popup/credentials.js) exposed on the global as SFFav.
   SFFav: "readonly",
+  // Vendored QR encoder (popup/vendor/qrcode.js) exposed as the global qrcode.
+  qrcode: "readonly",
 };
 
 const nodeGlobals = {
@@ -70,7 +72,14 @@ const jestGlobals = {
 
 module.exports = [
   {
-    ignores: ["node_modules/**", "build/**", "dist/**", "coverage/**", "*.zip"],
+    ignores: [
+      "node_modules/**",
+      "build/**",
+      "dist/**",
+      "coverage/**",
+      "*.zip",
+      "popup/vendor/**", // third-party (qrcode-generator, MIT) — not ours to lint
+    ],
   },
   js.configs.recommended,
   {
