@@ -116,6 +116,8 @@ function wireLock() {
   }
   const btn = $("lockBtn");
   if (btn) btn.addEventListener("click", onLockSubmit);
+  const probe = $("bioProbe");
+  if (probe) probe.addEventListener("click", runBiometricProbe);
   const pass2 = $("lockPass2");
   [$("lockPass"), pass2].forEach((el) => {
     if (el) {
@@ -189,6 +191,55 @@ async function onLockSubmit() {
   } catch (e) {
     lockError(e.message || "Could not unlock.");
   }
+}
+
+// TEMPORARY diagnostic: does WebAuthn (Touch ID / Windows Hello) + the PRF
+// extension work inside this extension popup? Reports a JSON result the user can
+// share. If PRF works here, the real biometric vault-unlock is buildable; if
+// create throws a SecurityError (RP-ID), the extension origin blocks WebAuthn.
+async function runBiometricProbe() {
+  const out = $("bioProbeOut");
+  if (!out) return;
+  out.hidden = false;
+  out.textContent = "Running… (approve the biometric prompt)";
+  const result = { secureContext: window.isSecureContext };
+  result.hasPublicKeyCredential = typeof PublicKeyCredential !== "undefined";
+  try {
+    result.platformAuthenticator =
+      await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  } catch (e) {
+    result.platformAuthenticatorError = String(e && e.message);
+  }
+  try {
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rp: { name: "SalesForceFav" },
+        user: {
+          id: crypto.getRandomValues(new Uint8Array(16)),
+          name: "vault",
+          displayName: "SalesForceFav Vault",
+        },
+        pubKeyCredParams: [
+          { type: "public-key", alg: -7 },
+          { type: "public-key", alg: -257 },
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform",
+          userVerification: "required",
+          residentKey: "required",
+        },
+        extensions: { prf: {} },
+        timeout: 60000,
+      },
+    });
+    result.created = !!cred;
+    const ext = cred && cred.getClientExtensionResults ? cred.getClientExtensionResults() : {};
+    result.prfSupported = !!(ext && ext.prf && ext.prf.enabled);
+  } catch (e) {
+    result.createError = `${e && e.name}: ${e && e.message}`;
+  }
+  out.textContent = JSON.stringify(result, null, 2);
 }
 
 function lock() {

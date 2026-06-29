@@ -12,6 +12,7 @@ const browserGlobals = {
   location: "readonly",
   navigator: "readonly",
   crypto: "readonly",
+  PublicKeyCredential: "readonly",
   console: "readonly",
   alert: "readonly",
   confirm: "readonly",
