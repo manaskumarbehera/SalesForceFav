@@ -9,6 +9,7 @@ const {
   upsertCredential,
   removeCredential,
   hexToRgb,
+  auditCredentials,
   base32Decode,
   base32Encode,
   buildOtpauthUri,
@@ -293,6 +294,44 @@ describe("validateCredential — TOTP", () => {
     const bad = validateCredential({ ...base, totp: "abc!!!" }, [], null);
     expect(bad.valid).toBe(false);
     expect(bad.errors.totp).toBeDefined();
+  });
+});
+
+describe("auditCredentials (security health)", () => {
+  test("flags reused passwords and orgs without 2FA", () => {
+    const { reusedGroups, noTwoFactor, issues } = auditCredentials([
+      {
+        credentialName: "Prod",
+        environment: "production",
+        password: "same",
+        totp: "JBSWY3DPEHPK3PXP",
+      },
+      { credentialName: "QA", environment: "sandbox", password: "same" },
+      { credentialName: "Dev", environment: "sandbox", password: "unique" },
+    ]);
+    expect(reusedGroups).toEqual([["Prod", "QA"]]);
+    expect(noTwoFactor.sort()).toEqual(["Dev", "QA"]); // Prod has 2FA
+    expect(issues).toBe(3); // 1 reused group + 2 no-2FA
+  });
+
+  test("excludes SSO orgs and empty passwords from both checks", () => {
+    const { reusedGroups, noTwoFactor, issues } = auditCredentials([
+      { credentialName: "Okta1", environment: "sso", ssourl: "https://a", password: "" },
+      { credentialName: "Okta2", environment: "sso", ssourl: "https://b", password: "" },
+      {
+        credentialName: "Secure",
+        environment: "production",
+        password: "x",
+        totp: "JBSWY3DPEHPK3PXP",
+      },
+    ]);
+    expect(reusedGroups).toEqual([]); // SSO empty passwords not grouped
+    expect(noTwoFactor).toEqual([]); // SSO not flagged; Secure has 2FA
+    expect(issues).toBe(0);
+  });
+
+  test("clean vault reports no issues", () => {
+    expect(auditCredentials([]).issues).toBe(0);
   });
 });
 

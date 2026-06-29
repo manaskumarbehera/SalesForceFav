@@ -28,8 +28,11 @@ See [Privacy Policy](./Privacy%20Policy.md).
   Standard RFC 6238 codes, verified against the official RFC test vectors.
 - **Backup & Restore** — export all credentials to a JSON file and import them back,
   with validation and automatic de-duplication.
+- **Security health check** — a header shield flags **reused passwords** across orgs
+  and orgs **without 2FA** (SSO orgs excluded); click it for a plain-language summary.
 - **Light / Dark theme** — toggle and it's remembered.
-- **Color tags** — give each org a color, shown on its card for quick recognition.
+- **Color tags + favicon recolor** — give each org a color shown on its card, and the
+  logged-in tab's favicon is tinted to match so you can tell orgs apart at a glance.
 - **Custom icon** — generated procedurally (`scripts/generate-icons.mjs`); no binary
   design assets to maintain.
 
@@ -75,10 +78,20 @@ To use **Incognito** logins, open the extension's **Details** page and enable
 - On login, the **background service worker** opens the correct Salesforce URL, waits
   for the page to load, then injects a script (`chrome.scripting`) to fill the login
   form and submit it. (Running this in the worker — not the popup — is what makes
-  auto-fill reliable: opening a tab closes the popup.)
+  auto-fill reliable: opening a tab closes the popup.) It then tints the tab's favicon.
+- **2FA autofill (optional, opt-in by storing a key):** if the org has an authenticator
+  key, the worker also fills the verification code on Salesforce's MFA challenge page —
+  **it fills but never submits**, so you confirm (a TOTP can roll over, and repeated bad
+  attempts lock accounts). Selectors are best-effort against Salesforce's DOM.
 
-> ⚠️ **Security note:** credentials (including passwords) are stored in plaintext in
-> the browser's local storage and never leave your machine. Use on trusted devices only.
+> ⚠️ **Security notes:**
+>
+> - Credentials (including passwords **and** authenticator keys) are stored in plaintext
+>   in `localStorage` and never leave your machine. Use on trusted devices only.
+> - Storing the password and the 2FA key together — and auto-filling both — means anyone
+>   with your unlocked browser has **both factors**. That weakens what 2FA protects against.
+>   Enable 2FA autofill only if that tradeoff is acceptable for the org; for high-value
+>   orgs, keep the 2FA key in a separate authenticator.
 
 ## Project structure
 

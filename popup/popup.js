@@ -120,6 +120,7 @@ const ICONS = {
     '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
   close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   bolt: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
 };
 
 // Return SVG markup for an icon. `fill` makes a solid glyph (used for pins).
@@ -172,6 +173,9 @@ function wireToolbar() {
     });
   }
 
+  const auditBtn = $("auditBtn");
+  if (auditBtn) auditBtn.addEventListener("click", () => toast(auditSummary()));
+
   // Esc closes the form; "/" focuses search (but not while typing in a field).
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeForm();
@@ -205,6 +209,7 @@ function render() {
   const visible = SFFav.sortCredentials(SFFav.filterCredentials(state.credentials, state.query));
 
   updateCount(visible.length);
+  updateAudit();
 
   if (visible.length === 0) {
     if (empty) {
@@ -237,6 +242,38 @@ function updateCount(visibleCount) {
   } else {
     label.textContent = `${visibleCount} of ${total}`;
   }
+}
+
+// Security health shield in the header: green when clean, amber with a count when
+// there are reused passwords or orgs without 2FA. Click for a plain-language summary.
+function updateAudit() {
+  const btn = $("auditBtn");
+  if (!btn) return;
+  if (state.credentials.length === 0) {
+    btn.hidden = true;
+    return;
+  }
+  const a = SFFav.auditCredentials(state.credentials);
+  btn.hidden = false;
+  btn.classList.toggle("audit-warn", a.issues > 0);
+  btn.title = a.issues > 0 ? `${a.issues} security issue(s)` : "No security issues";
+  btn.innerHTML =
+    svgMarkup("shield", a.issues === 0) +
+    (a.issues > 0 ? `<span class="audit-badge">${a.issues}</span>` : "");
+}
+
+function auditSummary() {
+  const a = SFFav.auditCredentials(state.credentials);
+  if (a.issues === 0) return "Looks good — no reused passwords and 2FA on every org.";
+  const parts = [];
+  if (a.reusedGroups.length) {
+    const orgs = a.reusedGroups.reduce((n, g) => n + g.length, 0);
+    parts.push(`${orgs} orgs reuse a password`);
+  }
+  if (a.noTwoFactor.length) {
+    parts.push(`${a.noTwoFactor.length} org${a.noTwoFactor.length === 1 ? "" : "s"} without 2FA`);
+  }
+  return parts.join(" · ");
 }
 
 // Build one credential card. Credential-derived text uses textContent only.

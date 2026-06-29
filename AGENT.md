@@ -75,8 +75,15 @@ testable helpers live in `popup/credentials.js`.
   `chrome.scripting.executeScript`s `fillSalesforceLogin()` into the page to fill
   `#username` / `#password` and click `#Login`. This must be in the worker because
   opening a tab closes the popup, which would kill any deferred listener it held.
-  (Post-login favicon recoloring was removed in this refactor; re-add it in the worker
-  once the core fill is confirmed on a real extension load.)
+  After the fill it tints the tab's favicon (`tintFaviconInPage`).
+- **2FA autofill (gated):** when the credential has a `totp` secret, the worker waits
+  for the post-login navigation and fills a one-time-code field (`fillTotpCodeInPage`)
+  with `SFFav.totp(...)` — **fills, never submits** (a TOTP can roll over; bad MFA
+  attempts lock accounts). Defensive/no-op when no verification field is present;
+  selectors are best-effort against Salesforce's DOM (not verifiable in the mock e2e).
+  Note: storing+autofilling both factors weakens 2FA — surfaced to the user in README.
+- **Security audit:** `SFFav.auditCredentials()` (pure, tested) finds reused passwords
+  and orgs without 2FA (SSO excluded); the popup shows it as a header shield.
 
 ## Conventions
 

@@ -128,6 +128,29 @@
     return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
   }
 
+  // Security health audit over the saved credentials. Returns the groups of orgs
+  // that share a password and the orgs without 2FA. SSO orgs are excluded from
+  // both (their password is empty and their MFA lives at the identity provider).
+  function auditCredentials(credentials) {
+    const list = Array.isArray(credentials) ? credentials : [];
+    const byPassword = new Map();
+    const noTwoFactor = [];
+    for (const c of list) {
+      if (!c || c.environment === "sso") continue;
+      if (c.password) {
+        if (!byPassword.has(c.password)) byPassword.set(c.password, []);
+        byPassword.get(c.password).push(c.credentialName);
+      }
+      if (!c.totp || !String(c.totp).trim()) noTwoFactor.push(c.credentialName);
+    }
+    const reusedGroups = [...byPassword.values()].filter((names) => names.length > 1);
+    return {
+      reusedGroups,
+      noTwoFactor,
+      issues: reusedGroups.length + noTwoFactor.length,
+    };
+  }
+
   // ── TOTP (RFC 6238) authenticator ────────────────────────────────────────
   // Pure, dependency-free SHA-1 / HMAC-SHA1 / Base32 so 2FA codes are computed
   // locally and the implementation is unit-testable against the published RFC
@@ -467,6 +490,7 @@
     upsertCredential,
     removeCredential,
     hexToRgb,
+    auditCredentials,
     base32Decode,
     base32Encode,
     buildOtpauthUri,

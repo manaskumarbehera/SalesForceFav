@@ -208,6 +208,19 @@ async function main() {
     assert.equal(result.password, TESTPASS, "password was not filled by the service worker");
     assert.equal(result.clicked, true, "the Login button was not clicked");
     log("PASS — service worker filled username + password and clicked Login");
+
+    // The service worker should also recolor the tab's favicon — wait for the
+    // <link rel=icon> href to change from the mock's known initial 1x1 PNG.
+    const MOCK_FAVICON_PREFIX = "data:image/png;base64,iVBORw0KGgoAAAANS"; // mock's 1x1
+    await sfPage.waitForFunction(
+      (init) => {
+        const l = document.querySelector("link[rel*='icon']");
+        return l && l.href.startsWith("data:image") && !l.href.startsWith(init);
+      },
+      { timeout: 10000 },
+      MOCK_FAVICON_PREFIX
+    );
+    log("PASS — service worker recolored the favicon");
   } finally {
     await browser.close();
     server.close();
