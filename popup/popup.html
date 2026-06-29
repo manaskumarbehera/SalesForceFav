@@ -90,9 +90,15 @@
            enabling encryption). Covers the app so the list isn't usable while locked. -->
       <div id="lockScreen" class="lock-screen" hidden>
         <div class="lock-card">
-          <div class="lock-icon" id="lockIcon"></div>
-          <h2 id="lockTitle">Unlock</h2>
+          <img class="lock-logo" src="../icons/icon-128.png" alt="" />
+          <h2 id="lockTitle">Vault locked</h2>
           <p id="lockHint" class="lock-hint"></p>
+
+          <button id="bioUnlock" class="btn btn-primary lock-bio" type="button" hidden>
+            Unlock with Touch ID / Windows Hello
+          </button>
+          <div id="lockOr" class="lock-or" hidden>or use your passphrase</div>
+
           <input id="lockPass" type="password" placeholder="Master passphrase" autocomplete="off" />
           <input
             id="lockPass2"
@@ -102,10 +108,7 @@
             hidden
           />
           <div id="lockError" class="lock-error" hidden></div>
-          <button id="lockBtn" class="btn btn-primary">Unlock</button>
-          <button id="bioUnlock" class="btn lock-bio" type="button" hidden>
-            Use Touch ID / Windows Hello
-          </button>
+          <button id="lockBtn" class="btn lock-submit">Unlock</button>
           <button id="lockReset" class="lock-reset" type="button" hidden>
             Forgot passphrase? Reset vault
           </button>

@@ -141,28 +141,42 @@ function showLock(mode) {
   const screen = $("lockScreen");
   if (!screen) return;
   screen.dataset.mode = mode;
-  setIcon($("lockIcon"), "lock");
+  const bioOn = mode === "unlock" && bioEnrolled();
+
   $("lockTitle").textContent = mode === "setup" ? "Encrypt your vault" : "Vault locked";
   $("lockHint").textContent =
     mode === "setup"
-      ? "Set a master passphrase. It encrypts all credentials and 2FA keys. If you forget it, the data can't be recovered."
-      : "Enter your master passphrase to unlock.";
+      ? "Set a master passphrase to encrypt all credentials and 2FA keys. If you forget it, the data can't be recovered."
+      : bioOn
+        ? "Unlock with your fingerprint, or your passphrase."
+        : "Enter your master passphrase to unlock.";
   $("lockPass2").hidden = mode !== "setup";
   $("lockBtn").textContent = mode === "setup" ? "Enable encryption" : "Unlock";
+
   const bioUnlock = $("bioUnlock");
-  if (bioUnlock) bioUnlock.hidden = !(mode === "unlock" && bioEnrolled());
-  const lockReset = $("lockReset");
-  if (lockReset) lockReset.hidden = mode !== "unlock";
+  if (bioUnlock) {
+    bioUnlock.hidden = !bioOn;
+    if (bioOn)
+      bioUnlock.innerHTML = `${svgMarkup("fingerprint")}<span>Unlock with Touch ID / Windows Hello</span>`;
+  }
+  if ($("lockOr")) $("lockOr").hidden = !bioOn;
+  // Biometric is the primary action when enrolled; otherwise the passphrase button is.
+  $("lockBtn").classList.toggle("btn-primary", !bioOn);
+  if ($("lockReset")) $("lockReset").hidden = mode !== "unlock";
+
   $("lockError").hidden = true;
   $("lockPass").value = "";
   $("lockPass2").value = "";
   screen.hidden = false;
-  $("lockPass").focus();
+  document.body.classList.add("sff-locked"); // hide app chrome behind the lock card
+  if (bioOn) bioUnlock.focus();
+  else $("lockPass").focus();
 }
 
 function hideLock() {
   const screen = $("lockScreen");
   if (screen) screen.hidden = true;
+  document.body.classList.remove("sff-locked");
   $("lockPass").value = "";
   $("lockPass2").value = "";
 }
@@ -270,11 +284,13 @@ async function enrollBiometric() {
     });
     const credId = bufToB64(cred.rawId);
     const saltB64 = bufToB64(salt);
-    const created = cred.getClientExtensionResults();
-    let prf =
-      created && created.prf && created.prf.results && created.prf.results.first
-        ? new Uint8Array(created.prf.results.first)
-        : await getPrfOutput(credId, saltB64); // some platforms only return PRF on get()
+    if (!(cred.getClientExtensionResults().prf || {}).enabled) {
+      throw new Error("This authenticator didn't enable PRF");
+    }
+    // Always derive the PRF via get() — the same path unlock uses — so the value
+    // that wraps the passphrase is guaranteed identical to the one at unlock.
+    // (PRF results returned at create-time can differ on some platforms.)
+    const prf = await getPrfOutput(credId, saltB64);
     const wrapped = await SFVault.wrapSecret(state.passphrase, prf);
     localStorage.setItem(
       BIO_KEY,
