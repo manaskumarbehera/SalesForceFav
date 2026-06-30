@@ -94,14 +94,20 @@
           <h2 id="lockTitle">Vault locked</h2>
           <p id="lockHint" class="lock-hint"></p>
 
-          <input id="lockPass" type="password" placeholder="Master passphrase" autocomplete="off" />
-          <input
-            id="lockPass2"
-            type="password"
-            placeholder="Confirm passphrase"
-            autocomplete="off"
-            hidden
-          />
+          <div class="lock-pw">
+            <input
+              id="lockPass"
+              type="password"
+              placeholder="Master passphrase"
+              autocomplete="off"
+            />
+            <button
+              id="lockPassToggle"
+              class="icon-btn"
+              type="button"
+              aria-label="Show passphrase"
+            ></button>
+          </div>
           <div id="lockError" class="lock-error" hidden></div>
           <button id="lockBtn" class="btn btn-primary lock-submit">Unlock</button>
           <button id="lockReset" class="lock-reset" type="button" hidden>

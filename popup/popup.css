@@ -625,6 +625,18 @@ body.sff-locked #formContainer {
 .lock-submit {
   width: 100%;
 }
+.lock-pw {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+.lock-pw input {
+  flex: 1;
+}
+.lock-pw .icon-btn {
+  flex-shrink: 0;
+}
 .lock-card input {
   width: 100%;
   padding: 8px 10px;

@@ -149,14 +149,20 @@ function wireLock() {
   if (lockReset) lockReset.addEventListener("click", resetVault);
   const encDisable = $("encDisable");
   if (encDisable) encDisable.addEventListener("click", disableEncryption);
-  const pass2 = $("lockPass2");
-  [$("lockPass"), pass2].forEach((el) => {
-    if (el) {
-      el.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") onLockSubmit();
-      });
-    }
-  });
+  const lockPass = $("lockPass");
+  if (lockPass) {
+    lockPass.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") onLockSubmit();
+    });
+  }
+  const lockPassToggle = $("lockPassToggle");
+  if (lockPassToggle && lockPass) {
+    lockPassToggle.addEventListener("click", () => {
+      const show = lockPass.type === "password";
+      lockPass.type = show ? "text" : "password";
+      setIcon(lockPassToggle, show ? "eye-off" : "eye");
+    });
+  }
 }
 
 function showLock(mode) {
@@ -169,13 +175,15 @@ function showLock(mode) {
     mode === "setup"
       ? "Set a master passphrase to encrypt all credentials and 2FA keys. If you forget it, the data can't be recovered."
       : "Enter your master passphrase to unlock.";
-  $("lockPass2").hidden = mode !== "setup";
   $("lockBtn").textContent = mode === "setup" ? "Enable encryption" : "Unlock";
   if ($("lockReset")) $("lockReset").hidden = mode !== "unlock";
+  // Reset the show/hide toggle to hidden each time the screen opens.
+  const lockPass = $("lockPass");
+  if (lockPass) lockPass.type = "password";
+  setIcon($("lockPassToggle"), "eye");
 
   $("lockError").hidden = true;
   $("lockPass").value = "";
-  $("lockPass2").value = "";
   screen.hidden = false;
   document.body.classList.add("sff-locked"); // hide app chrome behind the lock card
   $("lockPass").focus();
@@ -186,7 +194,6 @@ function hideLock() {
   if (screen) screen.hidden = true;
   document.body.classList.remove("sff-locked");
   $("lockPass").value = "";
-  $("lockPass2").value = "";
 }
 
 function lockError(msg) {
@@ -202,7 +209,6 @@ async function onLockSubmit() {
   if (!pass) return lockError("Enter a passphrase.");
 
   if (mode === "setup") {
-    if (pass !== $("lockPass2").value) return lockError("Passphrases don't match.");
     if (pass.length < 6) return lockError("Use at least 6 characters.");
     state.passphrase = pass;
     // Only drop the plaintext copy AFTER the encrypted vault is confirmed written.
