@@ -801,6 +801,14 @@ function openForm(editIndex) {
     $("totp").value = cred.totp || "";
     showTotpSetup();
     $("pinned").checked = cred.pinned === true;
+  } else {
+    // New org: generate an authenticator key so the 2FA QR is visible by default
+    // (no "New" button). Scan it into Salesforce, paste your own key to override,
+    // or clear the field for no 2FA.
+    const bytes = new Uint8Array(20); // 160-bit secret (RFC 6238 §5.1)
+    crypto.getRandomValues(bytes);
+    $("totp").value = SFFav.base32Encode(bytes);
+    showTotpSetup();
   }
   updateEnvFields(environment.value);
 
@@ -933,8 +941,8 @@ const formHtml = `
     <div id="totpSetup" class="totp-setup" hidden>
       <p class="totp-setup-title">Scan to add this org's 2FA</p>
       <p class="totp-setup-hint">
-        Scan with your phone's authenticator, or in Salesforce choose "use an
-        authenticator app" and enter the key below.
+        Scan this into Salesforce (or your phone) to enable 2FA — or paste your own key
+        above. Clear the field for no 2FA.
       </p>
       <div id="totpQr" class="totp-qr" aria-label="2FA setup QR code"></div>
       <div class="totp-setup-keyrow">
