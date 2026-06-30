@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SalesForceFav",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "description": "Automate Salesforce login",
   "permissions": ["activeTab", "tabs", "scripting", "storage"],
   "host_permissions": ["<all_urls>"],

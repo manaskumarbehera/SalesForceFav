@@ -176,7 +176,9 @@ function showLock(mode) {
       ? "Set a master passphrase to encrypt all credentials and 2FA keys. If you forget it, the data can't be recovered."
       : "Enter your master passphrase to unlock.";
   $("lockBtn").textContent = mode === "setup" ? "Enable encryption" : "Unlock";
-  if ($("lockReset")) $("lockReset").hidden = mode !== "unlock";
+  // The reset escape hatch only appears after a failed unlock (revealed in the
+  // unlock-error path) — not on every lock screen.
+  if ($("lockReset")) $("lockReset").hidden = true;
   // Reset the show/hide toggle to hidden each time the screen opens.
   const lockPass = $("lockPass");
   if (lockPass) lockPass.type = "password";
@@ -236,6 +238,8 @@ async function onLockSubmit() {
     render();
   } catch (e) {
     lockError(e.message || "Could not unlock.");
+    // Offer the reset escape hatch only once the user has actually failed to unlock.
+    if ($("lockReset")) $("lockReset").hidden = false;
   }
 }
 
@@ -760,7 +764,12 @@ function openForm(editIndex) {
     });
   const showTotpSetup = () => {
     const secret = totp.value.trim();
-    if (!secret || !SFFav.isValidTotpSecret(secret)) {
+    const valid = secret && SFFav.isValidTotpSecret(secret);
+    // Once a valid key exists, hide "New" (regenerating would break the org's
+    // existing 2FA) and show the key + QR by default. Clear the field to get
+    // "New" back.
+    if ($("totpGen")) $("totpGen").hidden = !!valid;
+    if (!valid) {
       totpSetup.hidden = true;
       totpQr.innerHTML = "";
       return;
