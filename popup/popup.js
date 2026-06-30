@@ -765,10 +765,7 @@ function openForm(editIndex) {
   const showTotpSetup = () => {
     const secret = totp.value.trim();
     const valid = secret && SFFav.isValidTotpSecret(secret);
-    // Once a valid key exists, hide "New" (regenerating would break the org's
-    // existing 2FA) and show the key + QR by default. Clear the field to get
-    // "New" back.
-    if ($("totpGen")) $("totpGen").hidden = !!valid;
+    // Show the key + QR setup only once a valid Base32 key is present.
     if (!valid) {
       totpSetup.hidden = true;
       totpQr.innerHTML = "";
@@ -788,13 +785,6 @@ function openForm(editIndex) {
     }
     totpSetup.hidden = false;
   };
-  $("totpGen").addEventListener("click", () => {
-    const bytes = new Uint8Array(20); // 160-bit secret (RFC 6238 §5.1)
-    crypto.getRandomValues(bytes);
-    totp.value = SFFav.base32Encode(bytes);
-    showTotpSetup();
-    toast("New authenticator key generated");
-  });
   totp.addEventListener("input", showTotpSetup);
   $("totpCopyKey").addEventListener("click", () => copy(totp.value.trim(), "Key copied"));
   $("totpCopyUri").addEventListener("click", () => copy(currentOtpauthUri(), "Setup link copied"));
@@ -939,10 +929,7 @@ const formHtml = `
     </div>
 
     <label for="totp">Authenticator key (2FA) — optional</label>
-    <div class="totp-field">
-      <input type="text" id="totp" autocomplete="off" placeholder="Base32 secret from your authenticator" />
-      <button type="button" id="totpGen" class="btn" title="Generate a new key">New</button>
-    </div>
+    <input type="text" id="totp" autocomplete="off" placeholder="Base32 secret from your authenticator" />
     <div id="totpSetup" class="totp-setup" hidden>
       <p class="totp-setup-title">Scan to add this org's 2FA</p>
       <p class="totp-setup-hint">
