@@ -14,7 +14,7 @@ const distDir = path.join(root, "dist");
 const requiredFiles = ["manifest.json", "background.js"];
 
 // Directories copied recursively into dist/.
-const requiredDirs = ["popup", "icons"];
+const requiredDirs = ["popup", "icons", "_locales"];
 
 for (const entry of [...requiredFiles, ...requiredDirs]) {
   try {
