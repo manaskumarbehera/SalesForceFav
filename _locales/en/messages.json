@@ -1,0 +1,10 @@
+{
+  "extensionName": {
+    "message": "SalesForceFav",
+    "description": "The name of the extension, shown in the toolbar and store listing."
+  },
+  "extensionDescription": {
+    "message": "Save your Salesforce logins and sign in with one click — Sandbox, Production & SSO — with built-in 2FA.",
+    "description": "The short description of the extension, shown in the store listing."
+  }
+}
