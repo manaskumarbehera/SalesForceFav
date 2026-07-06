@@ -577,6 +577,27 @@ html[data-theme="dark"] .env-custom {
   font-weight: 400;
   color: var(--text-muted);
 }
+/* Shown in place of the authenticator controls when the sffav CLI isn't found. */
+.totp-cli-hint {
+  margin-top: 10px;
+  padding: 9px 11px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.totp-cli-hint code {
+  font:
+    600 11px/1 "SF Mono",
+    ui-monospace,
+    monospace;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
 .totp-input-row {
   display: flex;
   gap: 6px;

@@ -181,6 +181,23 @@ vault and asserts its output matches the unit-tested library, and that the key i
 encrypted (never in the vault file as plaintext). The extension popup shows the same live
 code on each org card, and can auto-fill it on Salesforce's login challenge.
 
+### The extension's built-in authenticator requires this CLI
+
+By design, the in-popup 2FA authenticator (the key field + QR + live code on each card) is
+available **only when the `sffav` CLI is installed** — the CLI is the encrypted, testable
+source of truth for authenticator keys. A browser extension can't see a globally-installed
+binary directly, so the CLI registers a tiny **native-messaging host** that the popup pings:
+
+```bash
+npm i -g .                                   # install the CLI
+sffav install-host                           # register the native host (published build)
+sffav install-host <your-extension-id>       # …or pass your unpacked/dev id (chrome://extensions)
+```
+
+Reopen the popup and the built-in authenticator appears; without it, the popup shows an
+"install the CLI" hint instead. `sffav uninstall-host` removes the registration.
+`tests/native-host.test.js` covers the host handshake and the manifest it writes.
+
 ### Agents / CI (non-interactive)
 
 An automated agent can pull a live MFA code without any prompt — set the passphrase in

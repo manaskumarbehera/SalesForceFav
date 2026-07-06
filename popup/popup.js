@@ -165,6 +165,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   wireLock();
   await initStore();
   probePlatformAuth(); // async; re-renders the biometric affordances when it resolves
+  probeCli(); // async; reveals/hides the built-in authenticator once we know if the CLI is installed
   updateLockButton();
   updateDeviceUnlockButton();
   if (isEncrypted()) {
@@ -351,6 +352,50 @@ async function probePlatformAuth() {
 }
 const deviceUnlockSupported = () => platformAuthAvailable;
 const hasDeviceUnlock = () => storeGet(DEVICE_UNLOCK_KEY) !== null;
+
+// ── CLI presence (gates the built-in authenticator) ──────────────────────────
+// The extension can't see a globally-installed binary directly, so the sffav
+// CLI registers a native-messaging host (`sffav install-host`) and we ping it.
+// A reply means the CLI is present → the in-popup 2FA authenticator is offered;
+// no host (or no reply) → it's hidden behind an "install the CLI" hint. Probed
+// once at startup and cached, then the 2FA surfaces re-render.
+const NATIVE_HOST = "com.salesforcefav.host";
+let cliInstalled = false;
+async function probeCli() {
+  cliInstalled = await new Promise((resolve) => {
+    let settled = false;
+    const done = (v) => {
+      if (!settled) {
+        settled = true;
+        resolve(v);
+      }
+    };
+    // A host that connects but never answers shouldn't hang the gate forever.
+    const timer = setTimeout(() => done(false), 2000);
+    try {
+      chrome.runtime.sendNativeMessage(NATIVE_HOST, { type: "ping" }, (resp) => {
+        clearTimeout(timer);
+        // lastError fires when no host is registered — the "not installed" case.
+        done(!chrome.runtime.lastError && !!(resp && resp.ok));
+      });
+    } catch {
+      clearTimeout(timer);
+      done(false);
+    }
+  });
+  applyFormCliGate(); // update an open Add/Edit form
+  render(); // re-render cards (2FA chip + "Set up 2FA" menu gate)
+}
+
+// Show the built-in-authenticator controls only when the CLI is present;
+// otherwise show the "install the CLI" hint. No-op when no form is open.
+function applyFormCliGate() {
+  const controls = $("totpControls");
+  const hint = $("totpCliHint");
+  if (!controls || !hint) return;
+  controls.hidden = !cliInstalled;
+  hint.hidden = cliInstalled;
+}
 
 function bytesToB64(bytes) {
   let s = "";
@@ -1044,10 +1089,17 @@ function renderAuditPanel() {
       );
       if (section) card.appendChild(section);
     });
-    const noTwoFactorSection = auditSection("Missing 2FA", a.noTwoFactor, "Set up 2FA", (cred) => {
-      closeAuditPanel();
-      sendSetupTotp(cred);
-    });
+    // The "Set up 2FA" action is part of the built-in authenticator, so it's
+    // offered only when the CLI is installed; the list itself still shows.
+    const noTwoFactorSection = auditSection(
+      "Missing 2FA",
+      a.noTwoFactor,
+      cliInstalled ? "Set up 2FA" : null,
+      (cred) => {
+        closeAuditPanel();
+        sendSetupTotp(cred);
+      }
+    );
     if (noTwoFactorSection) card.appendChild(noTwoFactorSection);
 
     const staleSection = auditSection("Not used in 90+ days", a.stale, null, null);
@@ -1130,10 +1182,11 @@ function buildCard(credential) {
 
   body.appendChild(meta);
 
-  // Live 2FA code chip (only when an authenticator key is stored). The secret is
+  // Live 2FA code chip — part of the built-in authenticator, so it's shown only
+  // when the CLI is installed (see probeCli) and a key is stored. The secret is
   // attached as a JS property — never as a DOM attribute — so it isn't exposed in
   // the serialized HTML. updateTotpChips() refreshes the code/countdown each tick.
-  if (credential.totp && SFFav.isValidTotpSecret(credential.totp)) {
+  if (cliInstalled && credential.totp && SFFav.isValidTotpSecret(credential.totp)) {
     const chip = document.createElement("button");
     chip.className = "totp-chip";
     chip.type = "button";
@@ -1191,16 +1244,23 @@ function buildCard(credential) {
       }
     );
   }
-  menuItems.push(
-    credential.totp
-      ? {
-          label: "Remove 2FA key",
-          icon: "shield-off",
-          danger: true,
-          onClick: () => removeTotp(credential),
-        }
-      : { label: "Set up 2FA", icon: "shield", onClick: () => sendSetupTotp(credential) }
-  );
+  // 2FA menu entries are part of the built-in authenticator — only when the CLI
+  // is installed. "Remove 2FA key" stays available so a key saved earlier (or via
+  // the CLI) can always be cleared, even if the CLI was since removed.
+  if (credential.totp) {
+    menuItems.push({
+      label: "Remove 2FA key",
+      icon: "shield-off",
+      danger: true,
+      onClick: () => removeTotp(credential),
+    });
+  } else if (cliInstalled) {
+    menuItems.push({
+      label: "Set up 2FA",
+      icon: "shield",
+      onClick: () => sendSetupTotp(credential),
+    });
+  }
   actions.appendChild(iconMenuButton(menuItems));
 
   actions.appendChild(
@@ -1491,6 +1551,7 @@ function openForm(editIndex) {
   }
   updateEnvFields(environment.value);
   wireFormTotp();
+  applyFormCliGate(); // built-in authenticator only when the CLI is installed
 
   $("newCredentialForm").addEventListener("submit", onFormSubmit);
   const cancel = (e) => {
@@ -1707,23 +1768,31 @@ const formHtml = `
     </div>
 
     <div id="totpFieldContainer">
-      <label for="totp">2FA / Authenticator key <span class="field-opt">(optional)</span></label>
-      <div class="totp-input-row">
-        <input type="text" id="totp" placeholder="Base32 key (e.g. JBSW Y3DP …)" autocomplete="off" spellcheck="false" />
-        <button type="button" id="totpGenerate" class="btn">Generate</button>
+      <!-- Built-in authenticator: shown only when the sffav CLI is installed
+           (detected via native messaging — see probeCli). Otherwise the hint. -->
+      <div id="totpCliHint" class="totp-cli-hint" hidden>
+        <strong>Built-in authenticator</strong> needs the <code>sffav</code> CLI. Install it, run
+        <code>sffav install-host</code>, then reopen this popup.
       </div>
-      <div id="totpEnroll" class="totp-enroll" hidden>
-        <div id="totpQr" class="totp-qr" aria-hidden="true"></div>
-        <div class="totp-enroll-side">
-          <div class="totp-live">
-            <span id="totpLiveCode" class="totp-live-code">— — —</span>
-            <span id="totpLiveLeft" class="totp-live-left"></span>
+      <div id="totpControls" hidden>
+        <label for="totp">2FA / Authenticator key <span class="field-opt">(optional)</span></label>
+        <div class="totp-input-row">
+          <input type="text" id="totp" placeholder="Base32 key (e.g. JBSW Y3DP …)" autocomplete="off" spellcheck="false" />
+          <button type="button" id="totpGenerate" class="btn">Generate</button>
+        </div>
+        <div id="totpEnroll" class="totp-enroll" hidden>
+          <div id="totpQr" class="totp-qr" aria-hidden="true"></div>
+          <div class="totp-enroll-side">
+            <div class="totp-live">
+              <span id="totpLiveCode" class="totp-live-code">— — —</span>
+              <span id="totpLiveLeft" class="totp-live-left"></span>
+            </div>
+            <button type="button" id="totpCopyUri" class="btn btn-small">Copy setup link</button>
+            <p class="totp-hint">
+              Scan in Salesforce (Setup → Advanced User Details → App Registration:
+              Authenticator Apps), or paste this key there.
+            </p>
           </div>
-          <button type="button" id="totpCopyUri" class="btn btn-small">Copy setup link</button>
-          <p class="totp-hint">
-            Scan in Salesforce (Setup → Advanced User Details → App Registration:
-            Authenticator Apps), or paste this key there.
-          </p>
         </div>
       </div>
     </div>
