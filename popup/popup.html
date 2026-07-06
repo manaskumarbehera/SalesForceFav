@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <title>SalesForceFav</title>
     <link rel="stylesheet" href="popup.css" />
-    <script defer src="vendor/qrcode.js"></script>
     <script defer src="credentials.js"></script>
     <script defer src="cryptovault.js"></script>
+    <script defer src="vendor/qrcode.js"></script>
     <script defer src="popup.js"></script>
   </head>
   <body>
@@ -43,6 +43,13 @@
             <span class="audit-badge" id="auditBadge"></span>
           </button>
           <button
+            id="deviceUnlockToggle"
+            class="icon-btn"
+            title="Enable biometric unlock"
+            aria-label="Enable biometric unlock"
+            hidden
+          ></button>
+          <button
             id="themeToggle"
             class="icon-btn"
             title="Toggle theme"
@@ -73,6 +80,7 @@
       </div>
 
       <div id="formContainer" class="form-panel" hidden></div>
+      <div id="auditPanel" class="form-panel" hidden></div>
 
       <ul id="credentialList" class="cred-list"></ul>
 
@@ -93,6 +101,12 @@
           <img class="lock-logo" src="../icons/icon-128.png" alt="" />
           <h2 id="lockTitle">Vault locked</h2>
           <p id="lockHint" class="lock-hint"></p>
+
+          <button id="lockDeviceBtn" class="btn btn-primary lock-device" type="button" hidden>
+            <span class="lock-device-icon" id="lockDeviceIcon" aria-hidden="true"></span>
+            <span id="lockDeviceLabel">Use biometric unlock</span>
+          </button>
+          <div id="lockOr" class="lock-or" hidden>or use your passphrase</div>
 
           <div class="lock-pw">
             <input
@@ -116,5 +130,8 @@
         </div>
       </div>
     </div>
+    <!-- Portal for per-card overflow menus: rendered here (not as a card
+         child) so they aren't clipped by .cred-card's overflow:hidden. -->
+    <div id="cardMenuPortal"></div>
   </body>
 </html>

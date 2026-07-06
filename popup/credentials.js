@@ -16,19 +16,26 @@
     production: "https://login.salesforce.com/",
   };
 
-  const ENVIRONMENTS = ["sandbox", "production", "sso"];
+  // "custom" is a My Domain login URL (https://acme.my.salesforce.com) with
+  // standard username/password fill — required for orgs that block the generic
+  // login.salesforce.com host ("Prevent login from login.salesforce.com").
+  const ENVIRONMENTS = ["sandbox", "production", "custom", "sso"];
 
   // Default tab/favicon color for new and imported credentials (matches the
   // CSS --accent token). Single source of truth so it can't drift.
   const DEFAULT_FAVICON_COLOR = "#3a5ccc";
 
-  // Resolve the URL to open for a credential. SSO uses the user-supplied URL;
-  // standard environments map to a fixed Salesforce host. Returns null when the
-  // environment is unknown or an SSO credential has no URL.
+  // Resolve the URL to open for a credential. SSO and custom (My Domain) use
+  // the user-supplied URL; standard environments map to a fixed Salesforce
+  // host. Returns null when the environment is unknown or a URL-based
+  // credential has no URL.
   function resolveSalesforceUrl(credential) {
     if (!credential) return null;
     if (credential.environment === "sso") {
       return credential.ssourl ? credential.ssourl : null;
+    }
+    if (credential.environment === "custom") {
+      return credential.customurl ? credential.customurl : null;
     }
     return SF_LOGIN_URLS[credential.environment] || null;
   }
@@ -86,6 +93,9 @@
         errors.ssourl = "Enter a valid SSO URL (http/https).";
       }
     } else if (ENVIRONMENTS.includes(c.environment)) {
+      if (c.environment === "custom" && !isValidHttpUrl(c.customurl)) {
+        errors.customurl = "Enter a valid My Domain URL (https://acme.my.salesforce.com).";
+      }
       if (!c.username || !String(c.username).trim()) {
         errors.username = "Username is required.";
       }
@@ -128,13 +138,22 @@
     return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
   }
 
+  const STALE_DAYS = 90;
+
   // Security health audit over the saved credentials. Returns the groups of orgs
   // that share a password and the orgs without 2FA. SSO orgs are excluded from
   // both (their password is empty and their MFA lives at the identity provider).
-  function auditCredentials(credentials) {
+  // `stale` (orgs unused for 90+ days) is informational, not a security issue —
+  // it's reported separately and left out of `issues` on purpose, so it doesn't
+  // shift the meaning of an existing, already-relied-on count. `nowMs` is taken
+  // as a parameter (never Date.now() internally) to keep this deterministic and
+  // testable, matching the rest of this module's convention (see totp()).
+  function auditCredentials(credentials, nowMs) {
     const list = Array.isArray(credentials) ? credentials : [];
+    const now = typeof nowMs === "number" ? nowMs : Date.now();
     const byPassword = new Map();
     const noTwoFactor = [];
+    const stale = [];
     for (const c of list) {
       if (!c || c.environment === "sso") continue;
       if (c.password) {
@@ -142,11 +161,15 @@
         byPassword.get(c.password).push(c.credentialName);
       }
       if (!c.totp || !String(c.totp).trim()) noTwoFactor.push(c.credentialName);
+      if (c.lastUsedAt && now - c.lastUsedAt > STALE_DAYS * 24 * 60 * 60 * 1000) {
+        stale.push(c.credentialName);
+      }
     }
     const reusedGroups = [...byPassword.values()].filter((names) => names.length > 1);
     return {
       reusedGroups,
       noTwoFactor,
+      stale,
       issues: reusedGroups.length + noTwoFactor.length,
     };
   }
@@ -425,6 +448,7 @@
       credentialName: String(raw.credentialName || "").trim(),
       environment: raw.environment || "",
       ssourl: raw.ssourl || "",
+      customurl: raw.customurl || "",
       username: raw.username || "",
       password: raw.password || "",
       faviconColor: raw.faviconColor || DEFAULT_FAVICON_COLOR,

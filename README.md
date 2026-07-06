@@ -147,7 +147,8 @@ A companion Node CLI (`sffav`) manages your logins from the terminal and — unl
 extension's `localStorage` — keeps them in an **encrypted vault**, never plaintext.
 
 ```bash
-npm link          # exposes `sffav` (or use: npm run cli -- <args>)
+npm link          # exposes `sffav` for development (or: npm run cli -- <args>)
+# or install it globally from the repo:  npm i -g .
 
 sffav init                                   # create an encrypted vault (prompts for a passphrase)
 sffav add --name "Acme Prod" --env production --username me@acme.com --password '…' --totp BASE32KEY
@@ -172,6 +173,13 @@ sffav totp "Acme Prod" --uri          # print the otpauth:// URI (turn into a QR
 sffav totp "Acme Prod"                # the current 6-digit code + seconds left
 sffav totp "Acme Prod" --raw          # just the 6 digits (for scripts/agents)
 ```
+
+These are real RFC-6238 TOTP codes (SHA-1, 6 digits, 30s), the same algorithm authenticator
+apps use — so `sffav totp … --raw` and Google Authenticator print the **same code** for the
+same key. `tests/cli.test.js` proves this end-to-end: it drives the CLI against a throwaway
+vault and asserts its output matches the unit-tested library, and that the key is stored
+encrypted (never in the vault file as plaintext). The extension popup shows the same live
+code on each org card, and can auto-fill it on Salesforce's login challenge.
 
 ### Agents / CI (non-interactive)
 

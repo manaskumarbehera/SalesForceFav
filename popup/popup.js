@@ -3,13 +3,69 @@
 //
 // Pure logic (validation, search, sort, import/export) lives in credentials.js
 // (exposed as SFFav) and is unit-tested. This file owns the DOM, chrome.* calls,
-// and localStorage. Credential-derived strings are rendered via textContent only
+// and storage. Credential-derived strings are rendered via textContent only
 // (never innerHTML) so an imported backup file can't inject markup.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── storage map ──────────────────────────────────────────────────────────────
+// Credential data lives in chrome.storage.local (durable across the profile;
+// unlike localStorage it is not subject to browser storage-pressure eviction),
+// accessed through a synchronous in-memory mirror (`store`) loaded once at
+// startup by initStore(). Legacy localStorage values are migrated on first run.
+// Values are kept as the same JSON strings the localStorage era used, so the
+// vault format — and therefore CLI backup-file compatibility — is unchanged.
+//
+//   Key                 | API                  | Lifecycle
+//   --------------------|----------------------|---------------------------------
+//   STORAGE_KEY          | chrome.storage.local | Permanent. Legacy plaintext
+//                        |  (via `store`)       | credential list (pre-encryption).
+//   VAULT_KEY            | chrome.storage.local | Permanent. Encrypted credential
+//                        |  (via `store`)       | list, once encryption is enabled
+//                        |                      | (replaces STORAGE_KEY).
+//   DEVICE_UNLOCK_KEY     | chrome.storage.local | Permanent until disabled. Touch
+//                        |  (via `store`)       | ID/Hello record: {credentialId,
+//                        |                      | salt, wrapped: <passphrase
+//                        |                      | encrypted under the PRF secret>}.
+//   THEME_KEY            | localStorage         | Permanent. Light/dark preference.
+//                        |                      | Stays in localStorage on purpose:
+//                        |                      | it's read synchronously before
+//                        |                      | first paint (async would flash
+//                        |                      | the wrong theme) and is cosmetic.
+//   PENDING_TOTP_KEY      | chrome.storage.local | Ephemeral. Queue of {credential
+//                        |  (direct, async)     | Name, secret} written by
+//                        |                      | background.js after the on-page
+//                        |                      | 2FA setup card, drained by
+//                        |                      | applyPendingTotp() into the real
+//                        |                      | (VAULT_KEY/STORAGE_KEY) list on
+//                        |                      | next popup open/unlock. Matched
+//                        |                      | by credentialName only — a
+//                        |                      | duplicate name would misapply.
+//   SESSION_PASS_KEY      | chrome.storage.     | Per-session. The passphrase,
+//                        |  session (async)     | held so re-opening the popup
+//                        |                      | doesn't re-prompt. Memory-only,
+//                        |                      | wiped when the browser quits or
+//                        |                      | on "Lock now". Never on disk.
+//
+// Only VAULT_KEY/STORAGE_KEY are the actual source of truth for credentials;
+// DEVICE_UNLOCK_KEY and PENDING_TOTP_KEY are narrow, single-purpose handoffs.
+// Security note: chrome.storage.local is plaintext-on-disk in the Chrome
+// profile, exactly like localStorage was — at-rest confidentiality comes from
+// the AES-256-GCM vault (cryptovault.js), not from the storage layer, and the
+// migration doesn't change that model.
 const STORAGE_KEY = "credentials"; // legacy plaintext (pre-encryption)
 const VAULT_KEY = "sffav-vault"; // encrypted blob (when encryption is enabled)
 const THEME_KEY = "sffav-theme";
+// chrome.storage.local key background.js stages generated 2FA keys under —
+// see the matching constant and comment in background.js.
+const PENDING_TOTP_KEY = "sffav-pending-totp";
+// Key for the Touch ID / Windows Hello convenience unlock — see the
+// device-unlock section below.
+const DEVICE_UNLOCK_KEY = "sffav-device-unlock";
+// chrome.storage.session key holding the passphrase for the current browser
+// session, so re-opening the popup doesn't re-prompt. session storage is
+// memory-only, wiped when the browser fully quits, and unreadable by content
+// scripts — see the "stay unlocked" section below.
+const SESSION_PASS_KEY = "sffav-session-pass";
 
 // In-memory view state. `credentials` is the source of truth (mirrors storage).
 // `passphrase` is held only while unlocked (cleared on lock / popup close).
@@ -20,23 +76,145 @@ const state = {
   passphrase: null,
 };
 
-const isEncrypted = () => localStorage.getItem(VAULT_KEY) !== null;
+// ── persisted-key mirror ─────────────────────────────────────────────────────
+// In-memory mirror of the chrome.storage.local keys, so the rest of the file
+// can keep reading synchronously. initStore() fills it once at startup (and
+// migrates any legacy localStorage values); storeSet/storeRemove write through
+// to chrome.storage.local. Values are raw JSON strings, same as before.
+const store = { [STORAGE_KEY]: null, [VAULT_KEY]: null, [DEVICE_UNLOCK_KEY]: null };
 
-document.addEventListener("DOMContentLoaded", function () {
+async function initStore() {
+  const keys = [STORAGE_KEY, VAULT_KEY, DEVICE_UNLOCK_KEY];
+  let got = {};
+  try {
+    got = await chrome.storage.local.get(keys);
+  } catch (e) {
+    console.error("SalesForceFav: storage read failed:", e);
+  }
+  for (const key of keys) {
+    if (typeof got[key] === "string") {
+      store[key] = got[key];
+      continue;
+    }
+    // One-time migration from the localStorage era. Copy first and only then
+    // delete, so a failed write can't lose the only copy.
+    const legacy = localStorage.getItem(key);
+    if (legacy !== null) {
+      store[key] = legacy;
+      try {
+        await chrome.storage.local.set({ [key]: legacy });
+        localStorage.removeItem(key);
+      } catch (e) {
+        console.error("SalesForceFav: storage migration failed for", key, e);
+      }
+    }
+  }
+}
+
+function storeGet(key) {
+  return store[key]; // JSON string, or null when unset
+}
+
+function storeSet(key, value) {
+  store[key] = value;
+  chrome.storage.local.set({ [key]: value });
+}
+
+function storeRemove(key) {
+  store[key] = null;
+  chrome.storage.local.remove(key);
+}
+
+// ── stay unlocked for the browser session ────────────────────────────────────
+// The passphrase lives in memory only while the popup is open, and the popup is
+// a fresh page load every time it opens — so without this it would re-prompt on
+// every open. Caching the passphrase in chrome.storage.session (memory-only,
+// wiped when the browser fully quits, isolated to this extension) lets the popup
+// silently re-derive the vault on open until the user quits the browser or hits
+// "Lock now". All three helpers swallow errors: a missing/blocked session store
+// simply falls back to the normal passphrase prompt.
+async function sessionRememberPass(pass) {
+  try {
+    await chrome.storage.session.set({ [SESSION_PASS_KEY]: pass });
+  } catch {
+    /* no session storage → user just re-enters the passphrase next open */
+  }
+}
+async function sessionGetPass() {
+  try {
+    const got = await chrome.storage.session.get(SESSION_PASS_KEY);
+    return typeof got[SESSION_PASS_KEY] === "string" ? got[SESSION_PASS_KEY] : null;
+  } catch {
+    return null;
+  }
+}
+async function sessionForgetPass() {
+  try {
+    await chrome.storage.session.remove(SESSION_PASS_KEY);
+  } catch {
+    /* best effort */
+  }
+}
+
+const isEncrypted = () => storeGet(VAULT_KEY) !== null;
+
+document.addEventListener("DOMContentLoaded", async function () {
   paintStaticIcons();
   applyTheme(localStorage.getItem(THEME_KEY) || "light");
   wireToolbar();
   wireLock();
+  await initStore();
+  probePlatformAuth(); // async; re-renders the biometric affordances when it resolves
   updateLockButton();
+  updateDeviceUnlockButton();
   if (isEncrypted()) {
-    // Vault exists → start locked; credentials load only after unlock.
-    showLock("unlock");
+    // Vault exists. Try to resume this browser session silently; only fall back
+    // to the lock screen when there's no cached passphrase (or it's stale).
+    const resumed = await tryResumeSession();
+    if (!resumed) showLock("unlock");
   } else {
     state.credentials = loadCredentials();
     render();
+    applyPendingTotp();
   }
   setInterval(updateTotpChips, 1000); // live 2FA codes + countdown
 });
+
+// Adopt any 2FA keys generated by the post-login setup prompt (background.js)
+// into their matching credential, now that we have a writable — and if
+// applicable, unlocked — copy of state.credentials to persist() through.
+// Entries that don't match a credential yet (e.g. it was renamed, or the
+// vault is still locked) are left staged for the next call.
+async function applyPendingTotp() {
+  let pending;
+  try {
+    const stored = await chrome.storage.local.get(PENDING_TOTP_KEY);
+    pending = Array.isArray(stored[PENDING_TOTP_KEY]) ? stored[PENDING_TOTP_KEY] : [];
+  } catch {
+    return;
+  }
+  if (!pending.length) return;
+
+  const remaining = [];
+  let applied = 0;
+  for (const entry of pending) {
+    const match = state.credentials.find(
+      (c) => c.credentialName === entry.credentialName && !c.totp
+    );
+    if (match && SFFav.isValidTotpSecret(entry.secret)) {
+      match.totp = entry.secret;
+      applied++;
+    } else {
+      remaining.push(entry);
+    }
+  }
+  await chrome.storage.local.set({ [PENDING_TOTP_KEY]: remaining });
+  if (applied) {
+    await persist();
+    render();
+    toast(applied === 1 ? "2FA key saved for 1 org" : `2FA keys saved for ${applied} orgs`);
+  }
+}
 
 // Refresh every visible 2FA chip: current code (grouped "123 456") and a ring
 // that shrinks over the 30s window. Reads the secret from the element property.
@@ -60,13 +238,14 @@ function paintStaticIcons() {
   setIcon($("importBtn"), "upload");
   setIcon($("exportBtn"), "download");
   setIcon($("emptyIcon"), "bolt");
+  setIcon($("lockDeviceIcon"), "fingerprint");
 }
 
 // ── persistence ──────────────────────────────────────────────────────────────
 
 function loadCredentials() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const parsed = JSON.parse(storeGet(STORAGE_KEY));
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
@@ -81,7 +260,7 @@ function persist() {
   if (state.passphrase) {
     return SFVault.encrypt({ credentials: state.credentials }, state.passphrase)
       .then((vault) => {
-        localStorage.setItem(VAULT_KEY, JSON.stringify(vault));
+        storeSet(VAULT_KEY, JSON.stringify(vault));
         return true;
       })
       .catch((e) => {
@@ -90,7 +269,7 @@ function persist() {
         return false;
       });
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.credentials));
+  storeSet(STORAGE_KEY, JSON.stringify(state.credentials));
   return Promise.resolve(true);
 }
 
@@ -127,11 +306,220 @@ function disableEncryption() {
       "needed to open the popup). You can re-enable encryption anytime. Continue?"
   );
   if (!ok) return;
+  sessionForgetPass(); // no vault to resume anymore
   state.passphrase = null; // persist() now writes the legacy plaintext key
   persist();
-  localStorage.removeItem(VAULT_KEY);
+  storeRemove(VAULT_KEY);
+  storeRemove(DEVICE_UNLOCK_KEY); // device unlock only makes sense on top of the encrypted vault
   updateLockButton();
+  updateDeviceUnlockButton();
   toast("Encryption turned off");
+}
+
+// ── device unlock (Touch ID / Windows Hello) ─────────────────────────────────
+// A convenience shortcut layered on the passphrase vault, not a replacement:
+// the passphrase is required to enable this (proves the vault is already
+// unlockable) and is the ONLY recovery path on a new device/profile/OS
+// install, since the platform authenticator's derived secret never leaves
+// this machine. Uses the WebAuthn `prf` extension — the same (credential,
+// salt) pair deterministically re-derives the same secret, so it works as a
+// symmetric key without the authenticator ever exposing one.
+//
+// Design: reuse SFVault's existing PBKDF2/AES-GCM vault format to wrap the
+// real passphrase under the PRF-derived secret (base64-encoded, fed in as if
+// it were itself a passphrase) — no new crypto primitive to review, just a
+// second, smaller vault stored alongside the real one.
+
+// Whether THIS machine actually has a usable platform authenticator (Touch ID,
+// Windows Hello, Android biometrics). The bare API-presence check (PublicKeyCredential
+// exists) is true even on desktops with no biometric hardware, which is why the
+// biometric affordances used to appear where they could never work. The real
+// answer comes from isUserVerifyingPlatformAuthenticatorAvailable(), which is
+// async — so we probe once at startup, cache the result, and re-render.
+let platformAuthAvailable = false;
+async function probePlatformAuth() {
+  try {
+    platformAuthAvailable =
+      typeof PublicKeyCredential !== "undefined" &&
+      !!navigator.credentials &&
+      typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === "function" &&
+      (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+  } catch {
+    platformAuthAvailable = false; // some browsers reject instead of resolving false
+  }
+  updateDeviceUnlockButton(); // reveal/refresh the biometric UI now that we know
+}
+const deviceUnlockSupported = () => platformAuthAvailable;
+const hasDeviceUnlock = () => storeGet(DEVICE_UNLOCK_KEY) !== null;
+
+function bytesToB64(bytes) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 1) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+function b64ToBytes(str) {
+  return Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+}
+
+// Run the WebAuthn assertion ceremony and return the PRF secret, base64-encoded.
+async function getDevicePrfSecret(credentialId, salt) {
+  const assertion = await navigator.credentials.get({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ id: credentialId, type: "public-key" }],
+      userVerification: "required",
+      extensions: { prf: { eval: { first: salt } } },
+    },
+  });
+  const results = assertion.getClientExtensionResults();
+  const secret = results && results.prf && results.prf.results && results.prf.results.first;
+  if (!secret) throw new Error("This device didn't return a usable key.");
+  return bytesToB64(new Uint8Array(secret));
+}
+
+// The platform authenticator's name is OS-specific — "Touch ID" on Apple,
+// "Windows Hello" on Windows — so show only the one that applies rather than
+// both. Everything reachable here has already passed the availability probe, so
+// the biometric path is always offered as an alternative to (an OR with) the
+// master passphrase, never a replacement for it. Falls back to a generic label
+// on Linux/ChromeOS/Android where the built-in authenticator has no one brand.
+function deviceUnlockNoun() {
+  const uaPlatform = (navigator.userAgentData && navigator.userAgentData.platform) || "";
+  const plat = (uaPlatform || navigator.platform || navigator.userAgent || "").toLowerCase();
+  if (/mac|iphone|ipad|ios/.test(plat)) return "Touch ID";
+  if (/win/.test(plat)) return "Windows Hello";
+  return "biometric unlock";
+}
+
+function updateDeviceUnlockButton() {
+  const noun = deviceUnlockNoun();
+  const toggle = $("deviceUnlockToggle");
+  if (toggle) {
+    const show = deviceUnlockSupported() && isEncrypted() && !!state.passphrase;
+    toggle.hidden = !show;
+    if (show) {
+      const on = hasDeviceUnlock();
+      setIcon(toggle, "fingerprint");
+      toggle.classList.toggle("on", on);
+      toggle.title = on ? `${noun} unlock is on — click to turn off` : `Enable ${noun} unlock`;
+      toggle.setAttribute("aria-label", toggle.title);
+    }
+  }
+  // Lock-screen button label follows the OS too ("Use Touch ID" / "Use Windows
+  // Hello"), set here since the static HTML can't know the platform.
+  const lockDeviceLabel = $("lockDeviceLabel");
+  if (lockDeviceLabel) lockDeviceLabel.textContent = `Use ${noun}`;
+  // Lock screen: when this device has biometric unlock enrolled, make it the
+  // prominent action — show the Touch ID / Windows Hello button on top, an
+  // "or use your passphrase" divider, and demote the passphrase Unlock button
+  // to a secondary style. When it's not enrolled, the passphrase stays primary
+  // and the biometric row is hidden entirely.
+  const bioReady = deviceUnlockSupported() && hasDeviceUnlock();
+  const lockDeviceBtn = $("lockDeviceBtn");
+  const lockOr = $("lockOr");
+  const lockBtn = $("lockBtn");
+  const inSetup = $("lockScreen") && $("lockScreen").dataset.mode === "setup";
+  if (lockDeviceBtn) lockDeviceBtn.hidden = !bioReady || inSetup;
+  if (lockOr) lockOr.hidden = !bioReady || inSetup;
+  // The passphrase submit is primary everywhere except when biometric is the
+  // headline action on the unlock screen.
+  if (lockBtn) lockBtn.classList.toggle("btn-primary", !(bioReady && !inSetup));
+}
+
+// Registers a platform-authenticator credential and wraps the CURRENT
+// passphrase under its PRF secret. Only reachable while unlocked, so the
+// passphrase is always known here — see the header comment above.
+async function enableDeviceUnlock() {
+  if (!state.passphrase) return;
+  try {
+    const salt = crypto.getRandomValues(new Uint8Array(32));
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        rp: { name: "SalesForceFav" }, // no id — browser uses this extension's origin
+        user: {
+          id: crypto.getRandomValues(new Uint8Array(16)),
+          name: "sffav-device-unlock",
+          displayName: "SalesForceFav vault unlock",
+        },
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        // ES256 + RS256 — Chrome's recommended default pair; some authenticators
+        // (older security keys, certain TPM-backed Windows Hello setups) only
+        // support RS256, and registration can fail without it as a fallback.
+        pubKeyCredParams: [
+          { type: "public-key", alg: -7 }, // ES256
+          { type: "public-key", alg: -257 }, // RS256
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform",
+          userVerification: "required",
+        },
+        // Ask for the secret in this same ceremony — some platform authenticators
+        // return it directly from create(), saving the user a second prompt.
+        extensions: { prf: { eval: { first: salt } } },
+      },
+    });
+    const createSecret = cred.getClientExtensionResults()?.prf?.results?.first;
+    // Most authenticators only confirm PRF *support* during registration and
+    // hand over the actual secret on a follow-up assertion — fall back to
+    // that (a second prompt) only when this device didn't provide it above.
+    const secretB64 = createSecret
+      ? bytesToB64(new Uint8Array(createSecret))
+      : await getDevicePrfSecret(cred.rawId, salt);
+    const wrapped = await SFVault.encrypt({ passphrase: state.passphrase }, secretB64);
+    storeSet(
+      DEVICE_UNLOCK_KEY,
+      JSON.stringify({
+        credentialId: bytesToB64(new Uint8Array(cred.rawId)),
+        salt: bytesToB64(salt),
+        wrapped,
+      })
+    );
+    updateDeviceUnlockButton();
+    toast(`${deviceUnlockNoun()} unlock enabled`);
+  } catch (e) {
+    console.error("SalesForceFav: enabling device unlock failed:", e);
+    toast("Couldn't enable device unlock");
+  }
+}
+
+function disableDeviceUnlock() {
+  storeRemove(DEVICE_UNLOCK_KEY);
+  updateDeviceUnlockButton();
+  toast("Device unlock turned off");
+}
+
+// Unlocks the real vault via the platform authenticator instead of a typed
+// passphrase. Any failure (cancelled prompt, tampered storage, unsupported
+// device) falls back to lockError — the passphrase field is always right
+// there, since it's the only recovery path if this doesn't work.
+async function onDeviceUnlockClick() {
+  let record;
+  try {
+    record = JSON.parse(storeGet(DEVICE_UNLOCK_KEY));
+  } catch {
+    record = null;
+  }
+  if (!record) return;
+  try {
+    const secretB64 = await getDevicePrfSecret(
+      b64ToBytes(record.credentialId),
+      b64ToBytes(record.salt)
+    );
+    const unwrapped = await SFVault.decrypt(record.wrapped, secretB64);
+    const vault = JSON.parse(storeGet(VAULT_KEY));
+    const data = await SFVault.decrypt(vault, unwrapped.passphrase);
+    state.credentials = Array.isArray(data.credentials) ? data.credentials : [];
+    state.passphrase = unwrapped.passphrase;
+    sessionRememberPass(unwrapped.passphrase); // stay unlocked for the rest of this browser session
+    hideLock();
+    updateLockButton();
+    updateDeviceUnlockButton();
+    render();
+    applyPendingTotp();
+  } catch (e) {
+    console.error("SalesForceFav: device unlock failed:", e);
+    lockError("Device unlock failed — enter your passphrase instead.");
+  }
 }
 
 function wireLock() {
@@ -149,6 +537,18 @@ function wireLock() {
   if (lockReset) lockReset.addEventListener("click", resetVault);
   const encDisable = $("encDisable");
   if (encDisable) encDisable.addEventListener("click", disableEncryption);
+  const lockDeviceBtn = $("lockDeviceBtn");
+  if (lockDeviceBtn) lockDeviceBtn.addEventListener("click", onDeviceUnlockClick);
+  const deviceUnlockToggle = $("deviceUnlockToggle");
+  if (deviceUnlockToggle) {
+    deviceUnlockToggle.addEventListener("click", () => {
+      if (hasDeviceUnlock()) {
+        if (confirm(`Turn off ${deviceUnlockNoun()} unlock on this device?`)) disableDeviceUnlock();
+      } else {
+        enableDeviceUnlock();
+      }
+    });
+  }
   const lockPass = $("lockPass");
   if (lockPass) {
     lockPass.addEventListener("keydown", (e) => {
@@ -186,6 +586,7 @@ function showLock(mode) {
 
   $("lockError").hidden = true;
   $("lockPass").value = "";
+  updateDeviceUnlockButton(); // shows the lock-screen Touch ID/Hello button when set up
   screen.hidden = false;
   document.body.classList.add("sff-locked"); // hide app chrome behind the lock card
   $("lockPass").focus();
@@ -205,6 +606,29 @@ function lockError(msg) {
   el.hidden = false;
 }
 
+// Silently re-open the vault from the session-cached passphrase (see
+// sessionRememberPass). Returns true when the popup is now unlocked; false when
+// there's nothing cached or the cache no longer decrypts the current vault (in
+// which case it's cleared so the user gets a clean passphrase prompt).
+async function tryResumeSession() {
+  const pass = await sessionGetPass();
+  if (!pass) return false;
+  try {
+    const vault = JSON.parse(storeGet(VAULT_KEY));
+    const data = await SFVault.decrypt(vault, pass);
+    state.credentials = Array.isArray(data.credentials) ? data.credentials : [];
+    state.passphrase = pass;
+    updateLockButton();
+    updateDeviceUnlockButton();
+    render();
+    applyPendingTotp();
+    return true;
+  } catch {
+    await sessionForgetPass();
+    return false;
+  }
+}
+
 async function onLockSubmit() {
   const mode = $("lockScreen").dataset.mode;
   const pass = $("lockPass").value;
@@ -219,9 +643,11 @@ async function onLockSubmit() {
       state.passphrase = null;
       return lockError("Couldn't enable encryption — please try again.");
     }
-    localStorage.removeItem(STORAGE_KEY);
+    storeRemove(STORAGE_KEY);
+    sessionRememberPass(pass); // stay unlocked for the rest of this browser session
     hideLock();
     updateLockButton();
+    updateDeviceUnlockButton();
     render();
     toast("Encryption enabled");
     return;
@@ -229,13 +655,16 @@ async function onLockSubmit() {
 
   // unlock
   try {
-    const vault = JSON.parse(localStorage.getItem(VAULT_KEY));
+    const vault = JSON.parse(storeGet(VAULT_KEY));
     const data = await SFVault.decrypt(vault, pass);
     state.credentials = Array.isArray(data.credentials) ? data.credentials : [];
     state.passphrase = pass;
+    sessionRememberPass(pass); // stay unlocked for the rest of this browser session
     hideLock();
     updateLockButton();
+    updateDeviceUnlockButton();
     render();
+    applyPendingTotp();
   } catch (e) {
     lockError(e.message || "Could not unlock.");
     // Offer the reset escape hatch only once the user has actually failed to unlock.
@@ -252,17 +681,21 @@ function resetVault() {
     "Reset will DELETE the encrypted vault and start fresh (you'll re-add your orgs).\n\n" +
     "If you have a backup file you can restore it afterwards. Continue?";
   if (!confirm(msg)) return;
-  localStorage.removeItem(VAULT_KEY);
-  localStorage.removeItem(STORAGE_KEY);
+  sessionForgetPass();
+  storeRemove(VAULT_KEY);
+  storeRemove(STORAGE_KEY);
+  storeRemove(DEVICE_UNLOCK_KEY); // the wrapped passphrase is unrecoverable without the vault anyway
   state.passphrase = null;
   state.credentials = [];
   hideLock();
   updateLockButton();
+  updateDeviceUnlockButton();
   render();
   toast("Vault reset — encryption is off");
 }
 
 function lock() {
+  sessionForgetPass(); // "Lock now" ends the stay-unlocked session
   state.passphrase = null;
   state.credentials = [];
   state.query = "";
@@ -287,6 +720,13 @@ function sendLogin(credential, loginType) {
   chrome.runtime.sendMessage({ type: "sffav-login", credential, loginType });
 }
 
+// Explicit, on-demand 2FA setup — logs in and shows the QR on the page, but
+// only when the user asks for it via the "Set up 2FA" button (never
+// automatically on a plain login).
+function sendSetupTotp(credential) {
+  chrome.runtime.sendMessage({ type: "sffav-setup-totp", credential });
+}
+
 const openInWindow = (credential) => sendLogin(credential, "newWindow");
 const openIncognito = (credential) => sendLogin(credential, "incognito");
 const openInTab = (credential) => sendLogin(credential, "newTab");
@@ -298,6 +738,7 @@ const openInTab = (credential) => sendLogin(credential, "newTab");
 const ENV_META = {
   sandbox: { label: "Sandbox", cls: "env-sandbox" },
   production: { label: "Production", cls: "env-production" },
+  custom: { label: "My Domain", cls: "env-custom" },
   sso: { label: "SSO", cls: "env-sso" },
 };
 
@@ -329,6 +770,11 @@ const ICONS = {
   close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   bolt: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  "shield-off":
+    '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="4" y1="3" x2="20" y2="21"/>',
+  fingerprint:
+    '<path d="M12 11a3 3 0 0 0-3 3c0 2 1 3 1 5"/><path d="M18 11a6 6 0 0 0-9.33-5"/><path d="M6 14a6 6 0 0 0 1 5"/><path d="M9 14a3 3 0 0 1 6 0c0 3-2 4-2 6"/><path d="M3 11a9 9 0 0 1 15.6-6.1"/><path d="M21 11a9 9 0 0 1-2.2 6.1"/>',
+  more: '<circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/>',
 };
 
 // Return SVG markup for an icon. `fill` makes a solid glyph (used for pins).
@@ -357,6 +803,16 @@ function wireToolbar() {
       state.query = search.value;
       render();
     });
+    // Enter launches the top match in a new tab — type a few letters, hit
+    // Enter, logged in. The list is already sorted pinned-first/most-recent,
+    // so the top match is the likeliest target.
+    search.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      const visible = SFFav.sortCredentials(
+        SFFav.filterCredentials(state.credentials, state.query)
+      );
+      if (visible.length > 0) launch(visible[0], openInTab);
+    });
   }
 
   const addBtn = $("addBtn");
@@ -382,11 +838,14 @@ function wireToolbar() {
   }
 
   const auditBtn = $("auditBtn");
-  if (auditBtn) auditBtn.addEventListener("click", () => toast(auditSummary()));
+  if (auditBtn) auditBtn.addEventListener("click", toggleAuditPanel);
 
   // Esc closes the form; "/" focuses search (but not while typing in a field).
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeForm();
+    if (e.key === "Escape") {
+      closeForm();
+      closeAuditPanel();
+    }
     if (e.key === "/" && !isEditable(document.activeElement)) {
       e.preventDefault();
       if (search) search.focus();
@@ -409,6 +868,7 @@ function applyTheme(theme) {
 // ── rendering ────────────────────────────────────────────────────────────────
 
 function render() {
+  closeCardMenu(); // rebuilding the list would otherwise orphan an open menu's anchor button
   const list = $("credentialList");
   const empty = $("emptyState");
   if (!list) return;
@@ -437,6 +897,10 @@ function render() {
   visible.forEach((credential) => {
     list.appendChild(buildCard(credential));
   });
+  // Fresh chips start with an empty code — updateTotpChips() only runs on the
+  // 1s interval otherwise, so without this the code is blank for up to a
+  // second after every render (unlock, search, add/edit).
+  updateTotpChips();
 }
 
 function updateCount(visibleCount) {
@@ -453,7 +917,7 @@ function updateCount(visibleCount) {
 }
 
 // Security health shield in the header: green when clean, amber with a count when
-// there are reused passwords or orgs without 2FA. Click for a plain-language summary.
+// there are reused passwords or orgs without 2FA. Click opens the audit panel.
 function updateAudit() {
   const btn = $("auditBtn");
   if (!btn) return;
@@ -461,27 +925,139 @@ function updateAudit() {
     btn.hidden = true;
     return;
   }
-  const a = SFFav.auditCredentials(state.credentials);
+  const a = SFFav.auditCredentials(state.credentials, Date.now());
   btn.hidden = false;
   btn.classList.toggle("audit-warn", a.issues > 0);
   btn.title = a.issues > 0 ? `${a.issues} security issue(s)` : "No security issues";
   btn.innerHTML =
     svgMarkup("shield", a.issues === 0) +
     (a.issues > 0 ? `<span class="audit-badge">${a.issues}</span>` : "");
+  // Keep an already-open panel in sync (e.g. after "Set up 2FA" resolves).
+  if (!$("auditPanel").hidden) renderAuditPanel();
 }
 
-function auditSummary() {
-  const a = SFFav.auditCredentials(state.credentials);
-  if (a.issues === 0) return "Looks good — no reused passwords and 2FA on every org.";
-  const parts = [];
-  if (a.reusedGroups.length) {
-    const orgs = a.reusedGroups.reduce((n, g) => n + g.length, 0);
-    parts.push(`${orgs} orgs reuse a password`);
+function findCredentialByName(name) {
+  return state.credentials.find((c) => c.credentialName === name) || null;
+}
+
+function toggleAuditPanel() {
+  const panel = $("auditPanel");
+  if (!panel) return;
+  if (panel.hidden) openAuditPanel();
+  else closeAuditPanel();
+}
+
+function openAuditPanel() {
+  closeForm(); // the Add/Edit form and the audit panel don't need to coexist
+  const panel = $("auditPanel");
+  if (!panel) return;
+  panel.hidden = false;
+  renderAuditPanel();
+}
+
+function closeAuditPanel() {
+  const panel = $("auditPanel");
+  if (!panel) return;
+  panel.innerHTML = "";
+  panel.hidden = true;
+}
+
+// One row: the org name (click → jump to Edit) plus an optional action button.
+function auditRow(name, actionLabel, onAction) {
+  const row = document.createElement("div");
+  row.className = "audit-row";
+  const nameBtn = document.createElement("button");
+  nameBtn.type = "button";
+  nameBtn.className = "audit-row-name";
+  nameBtn.textContent = name;
+  nameBtn.title = "Edit this org";
+  nameBtn.addEventListener("click", () => {
+    const cred = findCredentialByName(name);
+    if (cred) {
+      closeAuditPanel();
+      openForm(indexOf(cred));
+    }
+  });
+  row.appendChild(nameBtn);
+  if (actionLabel) {
+    const actionBtn = document.createElement("button");
+    actionBtn.type = "button";
+    actionBtn.className = "btn audit-row-action";
+    actionBtn.textContent = actionLabel;
+    actionBtn.addEventListener("click", () => {
+      const cred = findCredentialByName(name);
+      if (cred) onAction(cred);
+    });
+    row.appendChild(actionBtn);
   }
-  if (a.noTwoFactor.length) {
-    parts.push(`${a.noTwoFactor.length} org${a.noTwoFactor.length === 1 ? "" : "s"} without 2FA`);
+  return row;
+}
+
+function auditSection(title, names, actionLabel, onAction) {
+  if (!names.length) return null;
+  const section = document.createElement("div");
+  section.className = "audit-section";
+  const heading = document.createElement("h3");
+  heading.textContent = `${title} (${names.length})`;
+  section.appendChild(heading);
+  names.forEach((name) => section.appendChild(auditRow(name, actionLabel, onAction)));
+  return section;
+}
+
+function renderAuditPanel() {
+  const panel = $("auditPanel");
+  if (!panel) return;
+  const a = SFFav.auditCredentials(state.credentials, Date.now());
+
+  panel.textContent = "";
+  const card = document.createElement("div");
+  card.className = "cred-form audit-card";
+
+  const head = document.createElement("div");
+  head.className = "form-head";
+  const title = document.createElement("strong");
+  title.textContent = "Security Audit";
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "icon-btn";
+  closeBtn.setAttribute("aria-label", "Close");
+  closeBtn.innerHTML = svgMarkup("close");
+  closeBtn.addEventListener("click", closeAuditPanel);
+  head.appendChild(title);
+  head.appendChild(closeBtn);
+  card.appendChild(head);
+
+  if (a.issues === 0 && a.stale.length === 0) {
+    const clean = document.createElement("p");
+    clean.className = "audit-clean";
+    clean.textContent = "✓ Looks good — no reused passwords, 2FA on every org, and nothing stale.";
+    card.appendChild(clean);
+  } else {
+    // Each reused-password group gets its own section, since "fixing" one
+    // means changing that specific shared password across those specific orgs.
+    a.reusedGroups.forEach((names, i) => {
+      const section = auditSection(
+        a.reusedGroups.length > 1 ? `Reused password (group ${i + 1})` : "Reused password",
+        names,
+        null,
+        null
+      );
+      if (section) card.appendChild(section);
+    });
+    const noTwoFactorSection = auditSection("Missing 2FA", a.noTwoFactor, "Set up 2FA", (cred) => {
+      closeAuditPanel();
+      sendSetupTotp(cred);
+    });
+    if (noTwoFactorSection) card.appendChild(noTwoFactorSection);
+
+    const staleSection = auditSection("Not used in 90+ days", a.stale, null, null);
+    if (staleSection) {
+      staleSection.classList.add("audit-informational");
+      card.appendChild(staleSection);
+    }
   }
-  return parts.join(" · ");
+
+  panel.appendChild(card);
 }
 
 // Build one credential card. Credential-derived text uses textContent only.
@@ -514,6 +1090,22 @@ function buildCard(credential) {
   name.className = "cred-name";
   name.textContent = credential.credentialName; // untrusted → textContent
   nameRow.appendChild(name);
+
+  // Quick copy-username / copy-password affordances that fade in on card hover
+  // (see .cred-copy). SSO orgs have no username/password, so they get none —
+  // matching the overflow-menu guard. Icons mirror the menu (user / lock).
+  if (credential.environment !== "sso") {
+    const copyWrap = document.createElement("span");
+    copyWrap.className = "cred-copy";
+    const copyBtn = (icon, label, value, okMsg) =>
+      iconButton(icon, label, "cred-copy-btn", (e) => {
+        e.stopPropagation(); // don't trip any card-level handler
+        copy(value, okMsg);
+      });
+    copyWrap.appendChild(copyBtn("user", "Copy username", credential.username, "Username copied"));
+    copyWrap.appendChild(copyBtn("lock", "Copy password", credential.password, "Password copied"));
+    nameRow.appendChild(copyWrap);
+  }
 
   body.appendChild(nameRow);
 
@@ -571,21 +1163,45 @@ function buildCard(credential) {
   actions.appendChild(
     iconButton("tab", "Open in new tab", "", () => launch(credential, openInTab))
   );
-  actions.appendChild(
-    iconButton("window", "Open in new window", "", () => launch(credential, openInWindow))
-  );
-  actions.appendChild(
-    iconButton("incognito", "Open in incognito", "", () => launch(credential, openIncognito))
-  );
 
+  // Less-frequent actions live behind "more" instead of as permanent icons.
+  const menuItems = [
+    {
+      label: "Open in new window",
+      icon: "window",
+      onClick: () => launch(credential, openInWindow),
+    },
+    {
+      label: "Open in incognito",
+      icon: "incognito",
+      onClick: () => launch(credential, openIncognito),
+    },
+  ];
   if (credential.environment !== "sso") {
-    actions.appendChild(
-      iconButton("user", "Copy username", "", () => copy(credential.username, "Username copied"))
-    );
-    actions.appendChild(
-      iconButton("lock", "Copy password", "", () => copy(credential.password, "Password copied"))
+    menuItems.push(
+      {
+        label: "Copy username",
+        icon: "user",
+        onClick: () => copy(credential.username, "Username copied"),
+      },
+      {
+        label: "Copy password",
+        icon: "lock",
+        onClick: () => copy(credential.password, "Password copied"),
+      }
     );
   }
+  menuItems.push(
+    credential.totp
+      ? {
+          label: "Remove 2FA key",
+          icon: "shield-off",
+          danger: true,
+          onClick: () => removeTotp(credential),
+        }
+      : { label: "Set up 2FA", icon: "shield", onClick: () => sendSetupTotp(credential) }
+  );
+  actions.appendChild(iconMenuButton(menuItems));
 
   actions.appendChild(
     iconButton(
@@ -613,6 +1229,91 @@ function iconButton(name, title, extraClass, onClick, fill) {
   return btn;
 }
 
+// ── card overflow menu ───────────────────────────────────────────────────────
+// Less-frequent per-card actions live behind a "more" button instead of as
+// permanent icons, so a card isn't 9 icons wide. Rendered into #cardMenuPortal
+// (a fixed top-level container) rather than as a card child, since .cred-card
+// has overflow:hidden (for the colored rail) and would clip a dropdown.
+let openCardMenuBtn = null;
+
+function closeCardMenu() {
+  const portal = $("cardMenuPortal");
+  if (portal) portal.textContent = "";
+  openCardMenuBtn = null;
+}
+
+function openCardMenu(anchorBtn, items) {
+  const alreadyOpenForThisButton = openCardMenuBtn === anchorBtn;
+  closeCardMenu();
+  if (alreadyOpenForThisButton) return; // clicking the same button again just closes it
+
+  const portal = $("cardMenuPortal");
+  if (!portal) return;
+  const list = document.createElement("div");
+  list.className = "card-menu-list";
+  items.forEach(({ label, icon, onClick, danger }) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `card-menu-item ${danger ? "danger" : ""}`.trim();
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "card-menu-icon";
+    iconSpan.innerHTML = svgMarkup(icon);
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = label;
+    item.appendChild(iconSpan);
+    item.appendChild(labelSpan);
+    item.addEventListener("click", () => {
+      closeCardMenu();
+      onClick();
+    });
+    list.appendChild(item);
+  });
+  portal.appendChild(list);
+
+  // Position from the button's actual screen coordinates (the portal has no
+  // layout relationship to the card), keeping the menu on-screen horizontally.
+  const rect = anchorBtn.getBoundingClientRect();
+  const menuWidth = list.offsetWidth || 180;
+  list.style.top = `${rect.bottom + 4}px`;
+  list.style.left = `${Math.max(8, rect.right - menuWidth)}px`;
+  openCardMenuBtn = anchorBtn;
+}
+
+function iconMenuButton(items) {
+  const btn = document.createElement("button");
+  btn.className = "icon-btn";
+  btn.title = "More actions";
+  btn.setAttribute("aria-label", "More actions");
+  btn.innerHTML = svgMarkup("more", true);
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openCardMenu(btn, items);
+  });
+  return btn;
+}
+
+// Close on outside click, Escape, or scrolling the list (a fixed-position
+// menu would otherwise visually detach from its anchor as the list scrolls).
+document.addEventListener("click", (e) => {
+  if (
+    openCardMenuBtn &&
+    !e.target.closest(".card-menu-list") &&
+    !openCardMenuBtn.contains(e.target)
+  ) {
+    closeCardMenu();
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeCardMenu();
+});
+document.addEventListener(
+  "scroll",
+  (e) => {
+    if (openCardMenuBtn && e.target.contains && e.target.contains(openCardMenuBtn)) closeCardMenu();
+  },
+  true
+);
+
 function indexOf(credential) {
   return state.credentials.indexOf(credential);
 }
@@ -635,6 +1336,26 @@ function togglePin(credential) {
   state.credentials = SFFav.togglePinAt(state.credentials, idx);
   persist();
   render();
+}
+
+// Clears a stored 2FA key so "Set up 2FA" reappears — for a key that was
+// generated but never actually registered with Salesforce (or the phone),
+// which otherwise can't be cleared since the Add/Edit form no longer has a
+// totp field (2FA setup lives in the post-login flow instead).
+function removeTotp(credential) {
+  const idx = indexOf(credential);
+  if (idx === -1) return;
+  const ok = confirm(
+    `Remove the saved 2FA key for "${credential.credentialName}"?\n\n` +
+      "Only do this if it was never actually registered with Salesforce or your phone " +
+      "— otherwise you'll lose the ability to generate matching codes. " +
+      '"Set up 2FA" will be available again afterward.'
+  );
+  if (!ok) return;
+  state.credentials[idx] = { ...state.credentials[idx], totp: "" };
+  persist();
+  render();
+  toast("2FA key removed");
 }
 
 function removeCard(credential) {
@@ -723,7 +1444,13 @@ function toast(message) {
 
 // ── add / edit form ──────────────────────────────────────────────────────────
 
+// Live-code refresh timer for the form's 2FA enrollment preview. Held at module
+// scope so closeForm() can stop it (leaving it running would keep computing
+// codes for a closed form). null when no form is open.
+let formTotpTimer = null;
+
 function openForm(editIndex) {
+  closeAuditPanel(); // the audit panel and the Add/Edit form don't need to coexist
   state.editIndex = typeof editIndex === "number" && editIndex >= 0 ? editIndex : null;
   const container = $("formContainer");
   if (!container) return;
@@ -749,68 +1476,21 @@ function openForm(editIndex) {
     });
   }
 
-  // Authenticator (2FA): SalesForceFav can be its own authenticator — "New"
-  // generates a fresh Base32 secret; the setup row reveals the key + an
-  // otpauth:// link to register the same secret with Salesforce or a phone.
-  const totp = $("totp");
-  const totpSetup = $("totpSetup");
-  const totpSetupKey = $("totpSetupKey");
-  const totpQr = $("totpQr");
-  // Build the otpauth:// URI for the current secret (account = username/name).
-  const currentOtpauthUri = () =>
-    SFFav.buildOtpauthUri({
-      account: $("username").value.trim() || $("credentialName").value.trim() || "account",
-      secret: totp.value.trim(),
-    });
-  const showTotpSetup = () => {
-    const secret = totp.value.trim();
-    const valid = secret && SFFav.isValidTotpSecret(secret);
-    // Show the key + QR setup only once a valid Base32 key is present.
-    if (!valid) {
-      totpSetup.hidden = true;
-      totpQr.innerHTML = "";
-      return;
-    }
-    totpSetupKey.textContent = secret.replace(/(.{4})/g, "$1 ").trim();
-    // Render the QR locally (the secret never leaves the browser). The SVG is
-    // built from static rects by the vendored encoder — safe to inject.
-    try {
-      const qr = qrcode(0, "M"); // type 0 = auto-size, error-correction level M
-      qr.addData(currentOtpauthUri());
-      qr.make();
-      totpQr.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
-    } catch (e) {
-      totpQr.innerHTML = "";
-      console.error("QR render failed:", e);
-    }
-    totpSetup.hidden = false;
-  };
-  totp.addEventListener("input", showTotpSetup);
-  $("totpCopyKey").addEventListener("click", () => copy(totp.value.trim(), "Key copied"));
-  $("totpCopyUri").addEventListener("click", () => copy(currentOtpauthUri(), "Setup link copied"));
-
   // Populate when editing (values set via .value — not innerHTML).
   if (cred) {
     $("title").textContent = "Edit org";
     $("credentialName").value = cred.credentialName || "";
     environment.value = cred.environment || "";
     $("ssourl").value = cred.ssourl || "";
+    $("customurl").value = cred.customurl || "";
     $("username").value = cred.username || "";
     $("password").value = cred.password || "";
     $("faviconColor").value = cred.faviconColor || SFFav.DEFAULT_FAVICON_COLOR;
-    $("totp").value = cred.totp || "";
-    showTotpSetup();
     $("pinned").checked = cred.pinned === true;
-  } else {
-    // New org: generate an authenticator key so the 2FA QR is visible by default
-    // (no "New" button). Scan it into Salesforce, paste your own key to override,
-    // or clear the field for no 2FA.
-    const bytes = new Uint8Array(20); // 160-bit secret (RFC 6238 §5.1)
-    crypto.getRandomValues(bytes);
-    $("totp").value = SFFav.base32Encode(bytes);
-    showTotpSetup();
+    $("totp").value = cred.totp || "";
   }
   updateEnvFields(environment.value);
+  wireFormTotp();
 
   $("newCredentialForm").addEventListener("submit", onFormSubmit);
   const cancel = (e) => {
@@ -823,14 +1503,90 @@ function openForm(editIndex) {
   $("credentialName").focus();
 }
 
+// Wire the in-form 2FA authenticator: Generate a key, live-preview the QR +
+// rolling code as the user types, and copy the otpauth setup link. The key is a
+// normal form field — onFormSubmit persists it like any other, and the card's
+// live chip (updateTotpChips) takes over once saved.
+function wireFormTotp() {
+  const input = $("totp");
+  if (!input) return;
+
+  $("totpGenerate").addEventListener("click", () => {
+    // 160-bit secret (RFC 6238 §5.1), Base32 like an authenticator app prints.
+    input.value = SFFav.base32Encode(crypto.getRandomValues(new Uint8Array(20)));
+    refreshFormTotp();
+    input.focus();
+  });
+  input.addEventListener("input", refreshFormTotp);
+
+  $("totpCopyUri").addEventListener("click", () => {
+    const uri = formOtpauthUri();
+    if (uri) copy(uri, "Setup link copied");
+  });
+
+  refreshFormTotp();
+  // Roll the live preview once a second while the form is open.
+  if (formTotpTimer) clearInterval(formTotpTimer);
+  formTotpTimer = setInterval(updateFormTotpLive, 1000);
+}
+
+// The otpauth:// URI for the key currently in the form, or null if it isn't a
+// valid Base32 secret yet. Account label prefers the username, then the org name.
+function formOtpauthUri() {
+  const secret = $("totp").value.trim();
+  if (!SFFav.isValidTotpSecret(secret)) return null;
+  const account = $("username").value.trim() || $("credentialName").value.trim() || "account";
+  return SFFav.buildOtpauthUri({ account, secret });
+}
+
+// Show/hide the enrollment block based on key validity and (re)render the QR.
+function refreshFormTotp() {
+  const enroll = $("totpEnroll");
+  const uri = formOtpauthUri();
+  if (!uri) {
+    enroll.hidden = true;
+    return;
+  }
+  enroll.hidden = false;
+  const host = $("totpQr");
+  try {
+    const qr = qrcode(0, "Q"); // type 0 = auto-size; level Q tolerates screen glare
+    qr.addData(uri);
+    qr.make();
+    host.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  } catch {
+    host.textContent = "QR unavailable — use the key above.";
+  }
+  updateFormTotpLive();
+}
+
+// Refresh the form's live code + countdown (mirrors updateTotpChips for the card).
+function updateFormTotpLive() {
+  const codeEl = $("totpLiveCode");
+  const leftEl = $("totpLiveLeft");
+  if (!codeEl || !leftEl) return;
+  const secret = $("totp").value.trim();
+  if (!SFFav.isValidTotpSecret(secret)) return;
+  const now = Date.now() / 1000;
+  const code = SFFav.totp(secret, now);
+  const left = SFFav.totpSecondsRemaining(now);
+  if (code) codeEl.textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
+  leftEl.textContent = `${left}s`;
+}
+
 function updateEnvFields(value) {
   const sso = value === "sso";
+  const custom = value === "custom";
   $("ssoUrlFieldContainer").hidden = !sso;
+  $("customUrlFieldContainer").hidden = !custom;
   $("usernameFieldContainer").hidden = sso;
   $("passwordFieldContainer").hidden = sso;
+  // TOTP is meaningless for SSO (no password to protect; MFA lives at the IdP).
+  $("totpFieldContainer").hidden = sso;
   $("username").required = !sso;
   $("password").required = !sso;
   $("ssourl").required = sso;
+  $("customurl").required = custom;
 }
 
 function onFormSubmit(event) {
@@ -847,10 +1603,14 @@ function onFormSubmit(event) {
     credentialName: $("credentialName").value.trim(),
     environment,
     ssourl: isSSO ? $("ssourl").value.trim() : "",
+    customurl: environment === "custom" ? $("customurl").value.trim() : "",
     username: isSSO ? "" : $("username").value.trim(),
     password: isSSO ? "" : $("password").value,
     faviconColor: $("faviconColor").value,
-    totp: $("totp").value.trim(),
+    // 2FA key entered in the form (also settable via the post-login QR flow in
+    // background.js). Cleared for SSO. validateCredential rejects a present-but-
+    // invalid Base32 key, so no extra check is needed here.
+    totp: isSSO ? "" : $("totp").value.trim(),
     pinned: $("pinned").checked,
     lastUsedAt: (editing && editing.lastUsedAt) || null,
   };
@@ -875,6 +1635,10 @@ function onFormSubmit(event) {
 function closeForm() {
   const container = $("formContainer");
   if (!container) return;
+  if (formTotpTimer) {
+    clearInterval(formTotpTimer);
+    formTotpTimer = null;
+  }
   container.innerHTML = "";
   container.hidden = true;
   state.editIndex = null;
@@ -915,12 +1679,18 @@ const formHtml = `
       <option value="" disabled selected>Select environment</option>
       <option value="sandbox">Sandbox</option>
       <option value="production">Production</option>
+      <option value="custom">Custom domain (My Domain)</option>
       <option value="sso">SSO</option>
     </select>
 
     <div id="ssoUrlFieldContainer" hidden>
       <label for="ssourl">SSO URL</label>
       <input type="url" id="ssourl" placeholder="https://my.okta.com/…" />
+    </div>
+
+    <div id="customUrlFieldContainer" hidden>
+      <label for="customurl">My Domain login URL</label>
+      <input type="url" id="customurl" placeholder="https://acme.my.salesforce.com" />
     </div>
 
     <div id="usernameFieldContainer">
@@ -936,23 +1706,28 @@ const formHtml = `
       </div>
     </div>
 
-    <label for="totp">Authenticator key (2FA) — optional</label>
-    <input type="text" id="totp" autocomplete="off" placeholder="Base32 secret from your authenticator" />
-    <div id="totpSetup" class="totp-setup" hidden>
-      <p class="totp-setup-title">Scan to add this org's 2FA</p>
-      <p class="totp-setup-hint">
-        Scan this into Salesforce (or your phone) to enable 2FA — or paste your own key
-        above. Clear the field for no 2FA.
-      </p>
-      <div id="totpQr" class="totp-qr" aria-label="2FA setup QR code"></div>
-      <div class="totp-setup-keyrow">
-        <code id="totpSetupKey" class="totp-setup-key"></code>
+    <div id="totpFieldContainer">
+      <label for="totp">2FA / Authenticator key <span class="field-opt">(optional)</span></label>
+      <div class="totp-input-row">
+        <input type="text" id="totp" placeholder="Base32 key (e.g. JBSW Y3DP …)" autocomplete="off" spellcheck="false" />
+        <button type="button" id="totpGenerate" class="btn">Generate</button>
       </div>
-      <div class="totp-setup-actions">
-        <button type="button" id="totpCopyKey" class="btn">Copy key</button>
-        <button type="button" id="totpCopyUri" class="btn">Copy setup link</button>
+      <div id="totpEnroll" class="totp-enroll" hidden>
+        <div id="totpQr" class="totp-qr" aria-hidden="true"></div>
+        <div class="totp-enroll-side">
+          <div class="totp-live">
+            <span id="totpLiveCode" class="totp-live-code">— — —</span>
+            <span id="totpLiveLeft" class="totp-live-left"></span>
+          </div>
+          <button type="button" id="totpCopyUri" class="btn btn-small">Copy setup link</button>
+          <p class="totp-hint">
+            Scan in Salesforce (Setup → Advanced User Details → App Registration:
+            Authenticator Apps), or paste this key there.
+          </p>
+        </div>
       </div>
     </div>
+
 
     <div class="form-row">
       <label for="faviconColor">Tab color</label>

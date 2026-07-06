@@ -10,6 +10,7 @@
 //
 //   sffav init                 create a new empty encrypted vault
 //   sffav add --name "Prod" --env production --username u --password p [--totp KEY] [--color #2563eb]
+//             --env custom needs --customurl https://acme.my.salesforce.com (My Domain login)
 //   sffav list                 list orgs (no secrets printed)
 //   sffav totp "Prod"          print the current 2FA code + seconds left
 //     --raw                    print only the 6 digits (for agents / scripts)
@@ -130,6 +131,7 @@ const commands = {
       credentialName: String(flags.name || "").trim(),
       environment: String(flags.env || "").trim(),
       ssourl: String(flags.ssourl || "").trim(),
+      customurl: String(flags.customurl || "").trim(),
       username: String(flags.username || "").trim(),
       password: typeof flags.password === "string" ? flags.password : "",
       totp: String(flags.totp || "").trim(),

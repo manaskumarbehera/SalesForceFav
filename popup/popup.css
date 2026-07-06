@@ -213,6 +213,49 @@ body {
   color: var(--accent);
 }
 
+/* ── card overflow menu (rendered into #cardMenuPortal, see popup.js) ── */
+.card-menu-list {
+  position: fixed;
+  z-index: 1000;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20, 25, 40, 0.16);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.card-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.card-menu-item:hover {
+  background: var(--surface-2);
+}
+.card-menu-item.danger {
+  color: var(--danger);
+}
+.card-menu-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.card-menu-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
 /* ── form action buttons (text) ── */
 .form-actions .btn {
   width: auto;
@@ -273,6 +316,34 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Hover-to-copy: username/password icons that fade in on card hover (and stay
+   visible while keyboard-focused). flex-shrink:0 so a long name ellipsizes
+   instead of squashing the buttons. */
+.cred-copy {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  margin-left: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.cred-card:hover .cred-copy,
+.cred-copy:focus-within {
+  opacity: 1;
+}
+.cred-copy-btn {
+  width: 22px;
+  height: 22px;
+}
+.cred-copy-btn svg {
+  width: 14px;
+  height: 14px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cred-copy {
+    transition: none;
+  }
+}
 .cred-meta {
   display: flex;
   align-items: center;
@@ -310,6 +381,10 @@ body {
   color: #5b53b5;
   background: rgba(91, 83, 181, 0.12);
 }
+.env-custom {
+  color: #0e7490;
+  background: rgba(14, 116, 144, 0.12);
+}
 html[data-theme="dark"] .env-sandbox {
   color: #e0b257;
 }
@@ -319,12 +394,17 @@ html[data-theme="dark"] .env-production {
 html[data-theme="dark"] .env-sso {
   color: #a9a2ef;
 }
+html[data-theme="dark"] .env-custom {
+  color: #67cfe3;
+}
 .cred-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 0;
-  max-width: 120px;
+  gap: 1px;
+  /* 5 primary actions now (open, more, pin, edit, delete) — was 9 before the
+     overflow menu, which is what the old, tighter cap was sized for. */
+  max-width: 170px;
 }
 
 /* ── live 2FA code chip ── */
@@ -491,6 +571,74 @@ html[data-theme="dark"] .env-sso {
   padding: 6px 12px;
   font-size: 12px;
 }
+
+/* ── in-form 2FA authenticator (Add/Edit form) ── */
+#totpFieldContainer .field-opt {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.totp-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.totp-input-row input {
+  flex: 1;
+}
+.totp-input-row .btn,
+.btn-small {
+  width: auto;
+  height: auto;
+  padding: 7px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.totp-enroll {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  padding: 10px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+/* display:flex above would defeat the [hidden] attribute, so re-assert it. */
+.totp-enroll[hidden] {
+  display: none;
+}
+.totp-enroll-side {
+  flex: 1;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.totp-live {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.totp-live-code {
+  font:
+    700 18px/1 "SF Mono",
+    ui-monospace,
+    monospace;
+  letter-spacing: 2px;
+  color: var(--accent);
+}
+.totp-live-left {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.totp-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
 .form-row {
   display: flex;
   align-items: center;
@@ -522,6 +670,65 @@ html[data-theme="dark"] .env-sso {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
+}
+
+/* ── security audit panel ── */
+.audit-card {
+  padding: 12px 14px 14px;
+}
+.audit-clean {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.audit-section {
+  margin-top: 12px;
+}
+.audit-section h3 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+.audit-section.audit-informational h3 {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+.audit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.audit-row:last-child {
+  border-bottom: none;
+}
+.audit-row-name {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  padding: 2px 0;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.12s ease;
+}
+.audit-row-name:hover {
+  text-decoration-color: var(--text-muted);
+}
+.audit-row-action {
+  width: auto;
+  height: auto;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  flex-shrink: 0;
 }
 .form-errors {
   background: rgba(192, 57, 43, 0.08);
@@ -648,6 +855,35 @@ body.sff-locked #formContainer {
   width: 100%;
   font-size: 12px;
   color: var(--danger);
+}
+.lock-device {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.lock-device-icon {
+  display: inline-flex;
+  line-height: 0;
+}
+/* "or use your passphrase" divider between the biometric button and the field */
+.lock-or {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.lock-or::before,
+.lock-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.lock-or[hidden] {
+  display: none;
 }
 .lock-reset {
   background: none;
