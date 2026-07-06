@@ -1230,20 +1230,8 @@ function buildCard(credential) {
       onClick: () => launch(credential, openIncognito),
     },
   ];
-  if (credential.environment !== "sso") {
-    menuItems.push(
-      {
-        label: "Copy username",
-        icon: "user",
-        onClick: () => copy(credential.username, "Username copied"),
-      },
-      {
-        label: "Copy password",
-        icon: "lock",
-        onClick: () => copy(credential.password, "Password copied"),
-      }
-    );
-  }
+  // Copy username/password live as hover icons on the card name row now (see
+  // .cred-copy), so they're no longer duplicated here in the overflow menu.
   // 2FA menu entries are part of the built-in authenticator — only when the CLI
   // is installed. "Remove 2FA key" stays available so a key saved earlier (or via
   // the CLI) can always be cleared, even if the CLI was since removed.
