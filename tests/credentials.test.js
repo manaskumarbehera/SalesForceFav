@@ -45,6 +45,13 @@ describe("resolveSalesforceUrl", () => {
     expect(resolveSalesforceUrl({ environment: "nope" })).toBeNull();
     expect(resolveSalesforceUrl(null)).toBeNull();
   });
+
+  test("uses the supplied My Domain URL for custom, null when missing", () => {
+    expect(
+      resolveSalesforceUrl({ environment: "custom", customurl: "https://acme.my.salesforce.com" })
+    ).toBe("https://acme.my.salesforce.com");
+    expect(resolveSalesforceUrl({ environment: "custom" })).toBeNull();
+  });
 });
 
 describe("normalizeName", () => {
@@ -116,6 +123,26 @@ describe("validateCredential", () => {
     expect(valid).toBe(false);
     expect(errors.credentialName).toBeDefined();
     expect(errors.environment).toBeDefined();
+  });
+
+  test("custom environment requires a valid My Domain URL plus username/password", () => {
+    const base = { credentialName: "Acme", environment: "custom", username: "u", password: "p" };
+    expect(validateCredential({ ...base, customurl: "not a url" }, [], null).valid).toBe(false);
+    expect(
+      validateCredential({ ...base, customurl: "https://acme.my.salesforce.com" }, [], null).valid
+    ).toBe(true);
+    const missingCreds = validateCredential(
+      {
+        credentialName: "Acme",
+        environment: "custom",
+        customurl: "https://acme.my.salesforce.com",
+      },
+      [],
+      null
+    );
+    expect(missingCreds.valid).toBe(false);
+    expect(missingCreds.errors.username).toBeDefined();
+    expect(missingCreds.errors.password).toBeDefined();
   });
 
   test("flags duplicate names", () => {
@@ -332,6 +359,39 @@ describe("auditCredentials (security health)", () => {
 
   test("clean vault reports no issues", () => {
     expect(auditCredentials([]).issues).toBe(0);
+  });
+
+  test("flags orgs unused for 90+ days as stale, without affecting issues", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const now = 1_700_000_000_000;
+    const { stale, issues } = auditCredentials(
+      [
+        {
+          credentialName: "Fresh",
+          environment: "production",
+          password: "unique1",
+          totp: "JBSWY3DPEHPK3PXP",
+          lastUsedAt: now - 10 * DAY,
+        },
+        {
+          credentialName: "Old",
+          environment: "sandbox",
+          password: "unique2",
+          totp: "JBSWY3DPEHPK3PXP",
+          lastUsedAt: now - 100 * DAY,
+        },
+        {
+          credentialName: "NeverUsed",
+          environment: "sandbox",
+          password: "unique3",
+          totp: "JBSWY3DPEHPK3PXP",
+          lastUsedAt: null,
+        },
+      ],
+      now
+    );
+    expect(stale).toEqual(["Old"]);
+    expect(issues).toBe(0); // staleness is informational, not a security issue
   });
 });
 

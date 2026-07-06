@@ -4,7 +4,7 @@
   "version": "1.9.7",
   "default_locale": "en",
   "description": "__MSG_extensionDescription__",
-  "permissions": ["activeTab", "tabs", "scripting", "storage"],
+  "permissions": ["activeTab", "tabs", "scripting", "storage", "nativeMessaging"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
