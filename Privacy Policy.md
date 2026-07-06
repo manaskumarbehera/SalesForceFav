@@ -1,60 +1,62 @@
-# SalesforceFav Privacy Policy
+# SalesForceFav Privacy Policy
 
-**Last Updated:** August 16, 2024
+**Last Updated:** July 6, 2026
 
-Welcome to SalesforceFav! Your privacy is important to us, and we are committed to protecting the information you share with us. This Privacy Policy explains how SalesforceFav ("we," "us," or "our") handles your data when you use our Chrome extension ("SalesforceFav" or "the Extension").
+Your privacy is important to us. This Privacy Policy explains how SalesForceFav ("we," "us," or "our") handles your data when you use our Chrome/Edge extension ("SalesForceFav" or "the Extension").
 
-## 1. Information We Collect
+**In short:** the Extension stores the data you enter **only on your own device**. We (the developer) have no server, receive nothing, and have no access to your data. There is no analytics and no tracking.
 
-### a. Personal Information:
+## 1. Information the Extension Stores (Locally, on Your Device)
 
-SalesforceFav does **not** collect, store, or transmit any personal information, including Salesforce credentials, usernames, passwords, or any other identifying information.
+### a. Salesforce login details
 
-### b. Usage Data:
+To sign you in, the Extension stores the login details you explicitly enter — org name, username, password, SSO or My Domain login URL, and **optionally a two-factor (2FA/TOTP) authenticator key** — in your browser's local storage on your own device. These can be encrypted with a master passphrase you set. We do **not** collect, receive, transmit, sell, or have any access to this data. Your credentials are sent only to the Salesforce or identity-provider login page **you** choose to open, in order to sign you in.
 
-We do not track or log any data about your interactions with the Extension. No browsing history, login activity, or Salesforce account details are collected or stored.
+### b. Two-factor (2FA) keys
 
-### c. Favicons:
+If you add a 2FA/TOTP key, it is stored locally alongside the matching org and is used **on your device** to compute time-based one-time codes. The key is never transmitted anywhere.
 
-The favicons you choose or upload are stored locally on your browser and are only used for the purpose of visually identifying your Salesforce accounts. We do not have access to this data.
+### c. Favicon colors and preferences
 
-## 2. How We Use Your Information
+The tab colors and preferences (such as theme) you choose are stored locally and used only to visually identify your orgs. We have no access to them.
 
-Since SalesforceFav does not collect any personal or usage data, there is no information to use or share. The Extension’s primary function is to help you manage and personalize your Salesforce account favicons, and all data related to this process is managed locally on your device.
+### d. Usage data
 
-## 3. Data Security
+We do **not** track or log your interactions, browsing history, or Salesforce activity. There is no analytics.
 
-### a. Local Storage:
+## 2. Companion CLI Detection (Native Messaging)
 
-All data related to your custom favicons and account preferences is stored locally on your browser. This data is never transmitted over the internet or shared with third parties.
+The Extension can detect whether the optional companion `sffav` command-line tool is installed on your computer. It does this by exchanging a fixed presence "ping" with a locally-registered native-messaging host that you install yourself (via `sffav install-host`). **No credentials, 2FA keys, secrets, or browsing data are sent to or received from this host** — only a `{"type":"ping"}` message and a version-string reply. If the tool isn't installed, the related feature is simply hidden. You can remove the registration at any time with `sffav uninstall-host`.
 
-### b. No Transmission:
+## 3. How We Use Your Information
 
-As SalesforceFav does not interact with any external servers or databases, your data remains entirely on your device. We recommend keeping your browser and the Extension updated to ensure security.
+Because the Extension stores everything locally and we receive nothing, there is no information for us to use or share. The Extension's function is to help you save Salesforce logins, sign in to your chosen org, and (optionally) generate 2FA codes — all handled on your device.
 
-## 4. Third-Party Services
+## 4. Data Security
 
-SalesforceFav does not integrate with any third-party services, and no data is shared with third parties.
+- **Local storage only.** All saved data stays in your browser on your device and is never transmitted to us or any third party.
+- **Optional encryption.** Credentials and 2FA keys can be encrypted at rest with a master passphrase (AES-256-GCM) that only you know; we cannot recover it.
+- **No external servers.** The Extension has no backend. The only network activity is your browser navigating to the login page you selected.
 
-## 5. Your Control Over Your Data
+## 5. Third-Party Services
 
-### a. Managing Favicons:
+SalesForceFav does not integrate with any third-party analytics or data services, and no data is shared with third parties. The only third party involved is Salesforce (or the identity provider) whose login page you choose to open.
 
-You can change or delete your custom favicons at any time directly through the Extension's interface. This will update or remove the favicons from your local storage.
+## 6. Your Control Over Your Data
 
-### b. Uninstallation:
+- **Manage or delete** any saved org, 2FA key, or preference at any time through the Extension's interface.
+- **Back up / restore** is entirely local — export writes a file you control.
+- **Uninstallation** removes all Extension data from your browser.
 
-If you choose to uninstall SalesforceFav, all data related to the Extension, including your custom favicons, will be removed from your browser.
+## 7. Changes to This Privacy Policy
 
-## 6. Changes to This Privacy Policy
+We may update this Privacy Policy from time to time. Significant changes will be noted here and via the store listing. Please review this policy periodically.
 
-We may update this Privacy Policy from time to time. If any significant changes are made, we will notify you through the Extension or via the Chrome Web Store. Please review this policy periodically to stay informed about how we are protecting your information.
+## 8. Contact Us
 
-## 7. Contact Us
-
-If you have any questions or concerns about this Privacy Policy or SalesforceFav, please contact us at:
+If you have any questions or concerns about this Privacy Policy or SalesForceFav, please contact us at:
 
 **Email:** [behera.manas98@gmail.com](mailto:behera.manas98@gmail.com)  
 **Address:** Falkonervænget 5, ST TH, Frederiksberg
 
-By using SalesforceFav, you agree to the terms outlined in this Privacy Policy. Thank you for trusting us to help improve your Salesforce experience!
+By using SalesForceFav, you agree to the terms outlined in this Privacy Policy.
