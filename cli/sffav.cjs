@@ -52,14 +52,44 @@ function nmHostPath() {
   return path.join(__dirname, "native-host.cjs");
 }
 
-function nmManifest(extIds) {
+function nmManifest(extIds, hostPath = nmHostPath()) {
   return {
     name: NM_HOST_NAME,
     description: "SalesForceFav CLI presence detector for the browser extension",
-    path: nmHostPath(),
+    path: hostPath,
     type: "stdio",
     allowed_origins: extIds.map((id) => `chrome-extension://${id}/`),
   };
+}
+
+// Where the macOS/Linux launcher wrapper lives (see writeUnixLauncher). Honors
+// SFFAV_NM_DIR so the test suite stays hermetic.
+function launcherDir() {
+  if (process.env.SFFAV_NM_DIR) return process.env.SFFAV_NM_DIR;
+  const home = os.homedir();
+  if (process.platform === "darwin") {
+    return path.join(home, "Library", "Application Support", "SalesForceFav");
+  }
+  return path.join(home, ".config", "SalesForceFav"); // linux
+}
+
+// A browser launched from the Dock/Finder runs native hosts with a minimal PATH
+// (/usr/bin:/bin:…) that excludes Homebrew (/opt/homebrew/bin) and nvm — so the
+// "#!/usr/bin/env node" shebang on native-host.cjs can't find node and the host
+// silently fails to start. Write a tiny launcher that hardcodes the ABSOLUTE
+// node path (the interpreter running THIS CLI, via process.execPath) and point
+// the manifest at it — the same wrapper trick install-host already uses on
+// Windows (.cmd). Returns the launcher's absolute path.
+function writeUnixLauncher() {
+  const dir = launcherDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const launcher = path.join(dir, "sffav-host.sh");
+  const body =
+    "#!/bin/sh\n" +
+    `exec ${JSON.stringify(process.execPath)} ${JSON.stringify(nmHostPath())} "$@"\n`;
+  fs.writeFileSync(launcher, body);
+  fs.chmodSync(launcher, 0o755);
+  return launcher;
 }
 
 // Browser NativeMessagingHosts directories to install into, per OS. Only those
@@ -324,7 +354,10 @@ const commands = {
 
     if (process.platform === "win32") return installHostWindows(extIds);
 
-    const manifest = JSON.stringify(nmManifest(extIds), null, 2) + "\n";
+    // Point the manifest at an absolute-node launcher, not native-host.cjs
+    // directly — Chrome's minimal launch PATH can't resolve the shebang's node.
+    const hostExec = writeUnixLauncher();
+    const manifest = JSON.stringify(nmManifest(extIds, hostExec), null, 2) + "\n";
     let wrote = 0;
     for (const t of nmTargets()) {
       if (!process.env.SFFAV_NM_DIR && !fs.existsSync(t.base)) continue; // browser not installed
@@ -357,6 +390,11 @@ const commands = {
         out(`  ✓ removed ${file}`);
         removed += 1;
       }
+    }
+    const launcher = path.join(launcherDir(), "sffav-host.sh");
+    if (fs.existsSync(launcher)) {
+      fs.rmSync(launcher);
+      out(`  ✓ removed ${launcher}`);
     }
     out(removed ? `\nRemoved ${removed} host manifest(s).` : "No host manifest found.");
   },
