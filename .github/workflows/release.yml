@@ -23,6 +23,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
+      # A tag push checks out that tag, so `git describe` returns the pushed tag,
+      # which equals the manifest version — the release scripts' "don't re-upload
+      # the same version" guard would false-trip. The tag itself is the release
+      # intent, so skip that check in CI.
+      SKIP_VERSION_CHECK: "true"
       CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
       CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
       CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
