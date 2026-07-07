@@ -179,6 +179,19 @@ body {
   width: 16px;
   height: 16px;
 }
+/* Labeled variant: escapes the fixed 34×34 icon-button box for an icon+text pill. */
+.btn-labeled {
+  width: auto;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn-ico {
+  display: inline-flex;
+  line-height: 0;
+}
 .btn-primary {
   background: var(--accent);
   color: var(--on-accent);
@@ -785,6 +798,9 @@ html[data-theme="dark"] .env-custom {
   font-size: 12px;
   margin: 0;
   line-height: 1.5;
+}
+.empty-cta {
+  margin-top: 16px;
 }
 
 /* ── lock / encryption overlay ── */

@@ -235,7 +235,8 @@ function updateTotpChips() {
 // Paint the fixed toolbar/header icons (theme toggle is set by applyTheme).
 function paintStaticIcons() {
   setIcon($("searchIcon"), "search");
-  setIcon($("addBtn"), "plus");
+  setIcon($("addBtnIcon"), "plus"); // labeled "Add org" — icon lives in a child span
+  setIcon($("emptyAddIcon"), "plus");
   setIcon($("importBtn"), "upload");
   setIcon($("exportBtn"), "download");
   setIcon($("emptyIcon"), "bolt");
@@ -870,6 +871,8 @@ function wireToolbar() {
 
   const addBtn = $("addBtn");
   if (addBtn) addBtn.addEventListener("click", () => openForm(null));
+  const emptyAddBtn = $("emptyAddBtn");
+  if (emptyAddBtn) emptyAddBtn.addEventListener("click", () => openForm(null));
 
   const exportBtn = $("exportBtn");
   if (exportBtn) exportBtn.addEventListener("click", exportBackup);
