@@ -68,7 +68,9 @@ set_count=0
 for k in "${KEYS[@]}"; do
   v="$(read_env "$k")"
   if [ -n "$v" ]; then
-    printf '%s' "$v" | gh secret set "$k" ${REPO_ARG[@]+"${REPO_ARG[@]}"} --body - >/dev/null
+    # No --body → gh reads the value from stdin (piped below). Passing `--body -`
+    # would literally set the secret to "-".
+    printf '%s' "$v" | gh secret set "$k" ${REPO_ARG[@]+"${REPO_ARG[@]}"} >/dev/null
     echo "  ✓ set $k"
     set_count=$((set_count + 1))
   else
