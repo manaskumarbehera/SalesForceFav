@@ -63,7 +63,15 @@
           <span class="search-icon" id="searchIcon" aria-hidden="true"></span>
           <input id="searchInput" type="search" placeholder="Search orgs" autocomplete="off" />
         </div>
-        <button id="addBtn" class="btn btn-primary" title="Add org" aria-label="Add org"></button>
+        <button
+          id="addBtn"
+          class="btn btn-primary btn-labeled"
+          title="Add org"
+          aria-label="Add org"
+        >
+          <span class="btn-ico" id="addBtnIcon" aria-hidden="true"></span>
+          Add org
+        </button>
         <button
           id="importBtn"
           class="btn"
@@ -90,6 +98,10 @@
         <p class="empty-sub" id="emptySub">
           Add your first Salesforce login, or restore from a backup.
         </p>
+        <button id="emptyAddBtn" class="btn btn-primary btn-labeled empty-cta" type="button">
+          <span class="btn-ico" id="emptyAddIcon" aria-hidden="true"></span>
+          Add org
+        </button>
       </div>
 
       <div id="toast" class="toast" role="status" hidden></div>
