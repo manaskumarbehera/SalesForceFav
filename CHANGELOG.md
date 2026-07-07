@@ -5,6 +5,33 @@ All notable changes to SalesForceFav are documented here. This project adheres t
 [Keep a Changelog](https://keepachangelog.com/) format. Releases before 1.10.0 predate this
 file; see the git history and tags for those.
 
+## [1.11.0] — 2026-07-07
+
+Reliability, login speed, and UI polish.
+
+### Fixed
+
+- **Login autofill now survives the login page's redirect chain.** A My Domain / POD
+  redirect firing mid-injection threw `Frame with ID 0 was removed`, which aborted the
+  whole login and left username/password unfilled. The fill now tolerates the frame
+  teardown and retries across navigations.
+- **Native-messaging host launches under Chrome's minimal PATH (macOS/Linux).** A
+  browser started from the Dock couldn't find Homebrew/nvm `node`, so the CLI-gated 2FA
+  authenticator never appeared. `sffav install-host` now writes an absolute-node launcher.
+
+### Changed
+
+- **Faster login** — the fill fires as soon as the login URL commits, instead of waiting
+  for the whole page to finish loading.
+- **New icon** — a shield with a lightning bolt (secure, fast login).
+- **UX** — the toolbar's primary action is now a labeled "Add org" button, and the empty
+  state has an "Add org" call-to-action.
+
+### Added
+
+- `npm run secrets:sync` — pushes store-release credentials from `.env` into GitHub
+  Actions secrets for the release workflow.
+
 ## [1.10.0] — 2026-07-06
 
 Turns the extension into a complete, CLI-backed 2FA authenticator, plus copy and unlock
