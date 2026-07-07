@@ -102,28 +102,37 @@
           <h2 id="lockTitle">Vault locked</h2>
           <p id="lockHint" class="lock-hint"></p>
 
-          <button id="lockDeviceBtn" class="btn btn-primary lock-device" type="button" hidden>
-            <span class="lock-device-icon" id="lockDeviceIcon" aria-hidden="true"></span>
-            <span id="lockDeviceLabel">Use biometric unlock</span>
-          </button>
-          <div id="lockOr" class="lock-or" hidden>or use your passphrase</div>
-
-          <div class="lock-pw">
-            <input
-              id="lockPass"
-              type="password"
-              placeholder="Master passphrase"
-              autocomplete="off"
-            />
-            <button
-              id="lockPassToggle"
-              class="icon-btn"
-              type="button"
-              aria-label="Show passphrase"
-            ></button>
+          <div id="lockMethods" class="lock-methods">
+            <button id="lockDeviceBtn" class="lock-device" type="button" hidden>
+              <span class="lock-device-icon" id="lockDeviceIcon" aria-hidden="true"></span>
+              <span id="lockDeviceLabel">Touch ID</span>
+            </button>
+            <div id="lockOr" class="lock-methods-or" hidden><span>or</span></div>
+            <div class="lock-pass-col" id="lockPwRow">
+              <div class="lock-pw">
+                <input
+                  id="lockPass"
+                  type="password"
+                  placeholder="Master passphrase"
+                  autocomplete="off"
+                />
+                <button
+                  id="lockPassToggle"
+                  class="icon-btn lock-pw-toggle"
+                  type="button"
+                  aria-label="Show passphrase"
+                ></button>
+              </div>
+              <button
+                id="lockBtn"
+                class="lock-go"
+                type="button"
+                aria-label="Unlock"
+                title="Unlock"
+              ></button>
+            </div>
           </div>
           <div id="lockError" class="lock-error" hidden></div>
-          <button id="lockBtn" class="btn btn-primary lock-submit">Unlock</button>
           <button id="lockReset" class="lock-reset" type="button" hidden>
             Forgot passphrase? Reset vault
           </button>

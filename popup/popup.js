@@ -450,25 +450,21 @@ function updateDeviceUnlockButton() {
       toggle.setAttribute("aria-label", toggle.title);
     }
   }
-  // Lock-screen button label follows the OS too ("Use Touch ID" / "Use Windows
-  // Hello"), set here since the static HTML can't know the platform.
+  // Lock-screen button label follows the OS ("Touch ID" / "Windows Hello"), set
+  // here since the static HTML can't know the platform. Kept terse — the icon
+  // already says "biometric".
   const lockDeviceLabel = $("lockDeviceLabel");
-  if (lockDeviceLabel) lockDeviceLabel.textContent = `Use ${noun}`;
-  // Lock screen: when this device has biometric unlock enrolled, make it the
-  // prominent action — show the Touch ID / Windows Hello button on top, an
-  // "or use your passphrase" divider, and demote the passphrase Unlock button
-  // to a secondary style. When it's not enrolled, the passphrase stays primary
-  // and the biometric row is hidden entirely.
+  if (lockDeviceLabel) lockDeviceLabel.textContent = noun;
+  // Side-by-side methods: when biometric unlock is enrolled, the Touch ID column
+  // sits next to the passphrase column with an "or" between them. In setup mode
+  // (nothing enrolled yet) the biometric column and the "or" are hidden and the
+  // passphrase column spans the full width.
   const bioReady = deviceUnlockSupported() && hasDeviceUnlock();
   const lockDeviceBtn = $("lockDeviceBtn");
   const lockOr = $("lockOr");
-  const lockBtn = $("lockBtn");
   const inSetup = $("lockScreen") && $("lockScreen").dataset.mode === "setup";
   if (lockDeviceBtn) lockDeviceBtn.hidden = !bioReady || inSetup;
   if (lockOr) lockOr.hidden = !bioReady || inSetup;
-  // The passphrase submit is primary everywhere except when biometric is the
-  // headline action on the unlock screen.
-  if (lockBtn) lockBtn.classList.toggle("btn-primary", !(bioReady && !inSetup));
 }
 
 // Registers a platform-authenticator credential and wraps the CURRENT
@@ -615,12 +611,23 @@ function showLock(mode) {
   if (!screen) return;
   screen.dataset.mode = mode;
 
-  $("lockTitle").textContent = mode === "setup" ? "Encrypt your vault" : "Vault locked";
-  $("lockHint").textContent =
-    mode === "setup"
-      ? "Set a master passphrase to encrypt all credentials and 2FA keys. If you forget it, the data can't be recovered."
-      : "Enter your master passphrase to unlock.";
-  $("lockBtn").textContent = mode === "setup" ? "Enable encryption" : "Unlock";
+  $("lockTitle").textContent = mode === "setup" ? "Encrypt vault" : "Vault locked";
+  const hint = $("lockHint");
+  if (hint) {
+    hint.textContent =
+      mode === "setup" ? "Set a passphrase. If you forget it, the data can't be recovered." : "";
+    hint.hidden = !hint.textContent; // no filler line on the unlock screen
+  }
+  // The submit is a compact arrow button inside the passphrase row; its meaning
+  // ("Unlock" vs "Enable encryption") rides on the title/aria-label, not visible
+  // text, so the row stays single-line. The heading + hint carry the wording.
+  const lockBtn = $("lockBtn");
+  if (lockBtn) {
+    const submitLabel = mode === "setup" ? "Enable encryption" : "Unlock";
+    lockBtn.setAttribute("aria-label", submitLabel);
+    lockBtn.title = submitLabel;
+    setIcon(lockBtn, "arrow-right");
+  }
   // The reset escape hatch only appears after a failed unlock (revealed in the
   // unlock-error path) — not on every lock screen.
   if ($("lockReset")) $("lockReset").hidden = true;
@@ -820,6 +827,7 @@ const ICONS = {
   fingerprint:
     '<path d="M12 11a3 3 0 0 0-3 3c0 2 1 3 1 5"/><path d="M18 11a6 6 0 0 0-9.33-5"/><path d="M6 14a6 6 0 0 0 1 5"/><path d="M9 14a3 3 0 0 1 6 0c0 3-2 4-2 6"/><path d="M3 11a9 9 0 0 1 15.6-6.1"/><path d="M21 11a9 9 0 0 1-2.2 6.1"/>',
   more: '<circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/>',
+  "arrow-right": '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
 };
 
 // Return SVG markup for an icon. `fill` makes a solid glyph (used for pins).
