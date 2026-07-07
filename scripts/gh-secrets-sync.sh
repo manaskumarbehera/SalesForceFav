@@ -42,17 +42,33 @@ KEYS=(
   EDGE_CERT_NOTES
 )
 
-# Load .env without echoing anything.
-set -a
-# shellcheck disable=SC1091
-. ./.env
-set +a
+# Read a KEY from .env LITERALLY — no `source`, so values containing $, quotes,
+# or spaces are passed through verbatim (sourcing would try to expand $… and, on
+# a real token, fail under `set -u`). Prints nothing; returns the raw value.
+read_env() {
+  local want="$1" line key val
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in "" | \#*) continue ;; esac
+    line="${line#export }"
+    key="${line%%=*}"
+    key="${key// /}"
+    [ "$key" = "$want" ] || continue
+    val="${line#*=}"
+    # strip one layer of matching surrounding quotes, if present
+    case "$val" in
+      \"*\") val="${val%\"}"; val="${val#\"}" ;;
+      \'*\') val="${val%\'}"; val="${val#\'}" ;;
+    esac
+    printf '%s' "$val"
+    return 0
+  done <.env
+}
 
 set_count=0
 for k in "${KEYS[@]}"; do
-  v="${!k:-}"
+  v="$(read_env "$k")"
   if [ -n "$v" ]; then
-    printf '%s' "$v" | gh secret set "$k" "${REPO_ARG[@]}" --body - >/dev/null
+    printf '%s' "$v" | gh secret set "$k" ${REPO_ARG[@]+"${REPO_ARG[@]}"} --body - >/dev/null
     echo "  ✓ set $k"
     set_count=$((set_count + 1))
   else
