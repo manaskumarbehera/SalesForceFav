@@ -28,10 +28,10 @@ async function fillSalesforceLogin(username, password) {
     // a redirect chain (e.g. a geo/POD bounce) can leave the real login page
     // still settling after the tab's "complete" event fires.
     let userField = null;
-    for (let i = 0; i < 25; i += 1) {
+    for (let i = 0; i < 50; i += 1) {
       userField = document.getElementById("username");
       if (userField) break;
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 100));
     }
     if (!userField) {
       console.error("SalesForceFav: username field not found on this page.");
@@ -68,10 +68,10 @@ async function fillSalesforceLogin(username, password) {
 async function fillSalesforcePasswordStep(password) {
   try {
     let passField = null;
-    for (let i = 0; i < 10; i += 1) {
+    for (let i = 0; i < 20; i += 1) {
       passField = document.getElementById("password");
       if (passField) break;
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 100));
     }
     if (!passField) {
       console.error("SalesForceFav: password field not found on the follow-up page.");
@@ -468,6 +468,57 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return false;
 });
 
+// Inject the login fill, tolerating the frame-teardown race. A Salesforce login
+// page routinely redirects right after it first reports "complete" (My Domain
+// resolution, a POD/geo bounce, test→login.salesforce.com) — and if
+// executeScript reaches the tab at the instant its main frame navigates, Chrome
+// throws "Frame with ID 0 was removed". Unwrapped, that rejected the whole
+// handleLogin promise and the fill silently never ran (see the line-445 catch).
+// So on that specific gone-error — OR when the form simply hasn't appeared yet
+// ("no-username-field") — wait for the next completed navigation and try again.
+// Any other error is a real failure and is surfaced. Returns the last
+// fillResult ("filled" | "needs-password-step" | "stuck" | "error") or null if
+// the form never showed up within the attempt budget.
+async function injectLoginFill(tabId, username, password, attempts = 4) {
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const [res] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: fillSalesforceLogin,
+        args: [username, password],
+      });
+      if (res && res.result === "no-username-field") {
+        await waitForTabComplete(tabId); // page still settling/redirecting — wait it out
+        continue;
+      }
+      return res ? res.result : null;
+    } catch (e) {
+      if (!isGoneError(e)) throw e; // a real failure, not the redirect race
+      await waitForTabComplete(tabId); // frame torn down mid-inject — wait for the next page
+    }
+  }
+  return null;
+}
+
+// The Login Discovery password step, made resilient to the same redirect race
+// as injectLoginFill (submitting the username step is itself a navigation, so
+// the follow-up page can still be settling when this fires).
+async function injectPasswordStep(tabId, password, attempts = 3) {
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: fillSalesforcePasswordStep,
+        args: [password],
+      });
+      return;
+    } catch (e) {
+      if (!isGoneError(e)) throw e;
+      await waitForTabComplete(tabId);
+    }
+  }
+}
+
 async function handleLogin(credential, loginType) {
   const url = self.SFFav.resolveSalesforceUrl(credential);
   if (!url) {
@@ -527,38 +578,24 @@ async function handleLogin(credential, loginType) {
 
   if (!shouldFill) return;
 
-  await waitForTabComplete(tab.id);
-  let [fillResult] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: fillSalesforceLogin,
-    args: [credential.username, credential.password],
-  });
-  // A fresh window (newWindow/incognito) spins up its own renderer and loads
-  // slower than a new tab in the current process — the login page can still be
-  // arriving when the first fill polls out. If the field wasn't found, wait for
-  // the next completed load and try once more before giving up.
-  if (fillResult && fillResult.result === "no-username-field") {
-    try {
-      await waitForTabComplete(tab.id);
-      [fillResult] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: fillSalesforceLogin,
-        args: [credential.username, credential.password],
-      });
-    } catch (e) {
-      console.error("SalesForceFav: login fill retry failed:", e);
-    }
-  }
-  if (fillResult && fillResult.result === "needs-password-step") {
+  // Fill as soon as the tab commits to the real login URL — NOT after the whole
+  // page finishes loading. The #username box is in the login page's initial
+  // HTML and fillSalesforceLogin polls for it, so typing can start seconds
+  // earlier than waiting for the "complete" (full-load) event would allow.
+  // Correctness is preserved by injectLoginFill: if this fires too early (an
+  // intermediate redirect page with no form yet) it returns "no-username-field"
+  // and the helper falls back to waitForTabComplete before retrying.
+  await waitForRealUrl(tab.id);
+  // injectLoginFill absorbs the login page's redirect chain: it retries across
+  // navigations and tolerates the "Frame with ID 0 was removed" race that a
+  // fresh window (newWindow/incognito) or a My Domain/POD bounce can trigger.
+  const fillResult = await injectLoginFill(tab.id, credential.username, credential.password);
+  if (fillResult === "needs-password-step") {
     // Login Discovery org: the username step just submitted and navigated to
     // a separate password step — wait for that page and fill it there.
     try {
       await waitForTabComplete(tab.id);
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: fillSalesforcePasswordStep,
-        args: [credential.password],
-      });
+      await injectPasswordStep(tab.id, credential.password);
     } catch (e) {
       console.error("SalesForceFav: password step failed:", e);
     }
@@ -670,6 +707,33 @@ async function handleTotpSetup(credential) {
 
 // Resolve on the NEXT tab "complete" (the post-login navigation), or after a
 // timeout if none happens — bounds the worker's lifetime.
+// Resolve the moment the tab has committed to a real (non-blank, non-chrome://)
+// URL, WITHOUT waiting for the page to finish loading. Used to start the login
+// fill as early as possible — the in-page poll in fillSalesforceLogin then waits
+// for the actual form field to paint. Falls back on a timeout so a tab that
+// never reports a real URL can't hang the flow.
+function waitForRealUrl(tabId, timeoutMs = 8000) {
+  const isRealPage = (url) => !!url && url !== "about:blank" && !url.startsWith("chrome://");
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    };
+    const listener = (updatedId, _info, updatedTab) => {
+      if (updatedId === tabId && updatedTab && isRealPage(updatedTab.url)) finish();
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    // The tab may already be on a real URL before the listener attaches.
+    chrome.tabs.get(tabId, (tab) => {
+      if (!chrome.runtime.lastError && tab && isRealPage(tab.url)) finish();
+    });
+    setTimeout(finish, timeoutMs);
+  });
+}
+
 function waitForNextComplete(tabId, timeoutMs) {
   return new Promise((resolve) => {
     let done = false;
