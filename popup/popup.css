@@ -815,7 +815,7 @@ body.sff-locked #formContainer {
 }
 .lock-card {
   width: 100%;
-  max-width: 300px;
+  max-width: 324px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -840,20 +840,57 @@ body.sff-locked #formContainer {
   line-height: 1.45;
   color: var(--text-muted);
 }
-.lock-submit {
+/* Side-by-side unlock methods: [ Touch ID ] or [ passphrase ]. */
+.lock-methods {
+  display: flex;
+  align-items: stretch; /* both columns share the taller column's height */
+  gap: 10px;
   width: 100%;
+}
+.lock-pass-col {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
 }
 .lock-pw {
   display: flex;
   gap: 6px;
-  align-items: center;
+  align-items: stretch; /* input + eye toggle share one height */
   width: 100%;
 }
 .lock-pw input {
   flex: 1;
+  min-width: 0;
 }
 .lock-pw .icon-btn {
   flex-shrink: 0;
+}
+/* Accent submit — arrow only (its "Unlock" / "Enable encryption" meaning rides
+   on title/aria-label) to keep on-screen text minimal. */
+.lock-go {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition:
+    filter 0.12s ease,
+    background 0.12s ease;
+}
+.lock-go:hover {
+  filter: brightness(1.06);
+}
+.lock-go:active {
+  filter: brightness(0.95);
 }
 .lock-card input {
   width: 100%;
@@ -877,33 +914,47 @@ body.sff-locked #formContainer {
   font-size: 12px;
   color: var(--danger);
 }
+/* Touch ID column — a tall accent card that matches the passphrase column's
+   height (align-items: stretch on .lock-methods). */
 .lock-device {
+  flex: 0 0 112px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  padding: 12px 8px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+.lock-device:hover {
+  filter: brightness(1.06);
+}
+.lock-device[hidden] {
+  display: none;
 }
 .lock-device-icon {
   display: inline-flex;
   line-height: 0;
 }
-/* "or use your passphrase" divider between the biometric button and the field */
-.lock-or {
+.lock-device-icon svg {
+  width: 24px;
+  height: 24px;
+}
+/* Vertical "or" between the two method columns. */
+.lock-methods-or {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 2px 0;
   font-size: 11px;
   color: var(--text-muted);
 }
-.lock-or::before,
-.lock-or::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-.lock-or[hidden] {
+.lock-methods-or[hidden] {
   display: none;
 }
 .lock-reset {
