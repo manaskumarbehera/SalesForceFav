@@ -26,6 +26,7 @@
     "package:chrome": "./build.sh chrome",
     "package:edge": "./build.sh edge",
     "chrome:auth": "node scripts/chrome-oauth-token.mjs --write",
+    "secrets:sync": "./scripts/gh-secrets-sync.sh",
     "release": "node scripts/release-all.mjs",
     "release:chrome:dry": "node scripts/release-chrome.mjs --dry-run",
     "release:chrome:publish": "node scripts/release-chrome.mjs --publish",

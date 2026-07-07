@@ -1,8 +1,10 @@
 // Generates the extension icons (PNG, RGBA) with no external dependencies.
 //
 // Each icon is a rounded-square with a diagonal blue→indigo gradient and a white
-// "Lightning" bolt. Rendering is supersampled 4× and box-averaged down, which
-// gives smooth (anti-aliased) edges. PNG is encoded by hand via Node's zlib.
+// shield (security/credentials) with a lightning bolt carved out of it (the
+// gradient shows through the bolt — "secure, fast login"). Rendering is
+// supersampled 4× and box-averaged down for smooth (anti-aliased) edges. PNG is
+// encoded by hand via Node's zlib.
 //
 //   node scripts/generate-icons.mjs
 import { deflateSync } from "node:zlib";
@@ -23,8 +25,25 @@ const STOPS = [
   [1.0, [47, 74, 168]], // #2F4AA8
 ];
 
-// Lightning-bolt polygon, normalized to the 0..1 icon box.
-const BOLT = [
+// Shield silhouette, normalized to the 0..1 icon box: flat top, sides that taper
+// through a curve to a point at the bottom-centre (classic heraldic shield).
+const SHIELD = [
+  [0.24, 0.185],
+  [0.76, 0.185],
+  [0.76, 0.46],
+  [0.735, 0.585],
+  [0.665, 0.7],
+  [0.565, 0.79],
+  [0.5, 0.835],
+  [0.435, 0.79],
+  [0.335, 0.7],
+  [0.265, 0.585],
+  [0.24, 0.46],
+];
+
+// Lightning-bolt polygon (original full-box coords), then scaled/centred into a
+// smaller box so it sits INSIDE the shield and reads as a carved-out bolt.
+const BOLT_SRC = [
   [0.605, 0.085],
   [0.305, 0.545],
   [0.475, 0.545],
@@ -32,6 +51,12 @@ const BOLT = [
   [0.715, 0.435],
   [0.535, 0.435],
 ];
+const SRC = { x0: 0.305, x1: 0.715, y0: 0.085, y1: 0.915 }; // bounds of BOLT_SRC
+const DST = { x0: 0.375, x1: 0.625, y0: 0.275, y1: 0.755 }; // bolt box inside the shield (bold)
+const BOLT = BOLT_SRC.map(([x, y]) => [
+  DST.x0 + ((x - SRC.x0) / (SRC.x1 - SRC.x0)) * (DST.x1 - DST.x0),
+  DST.y0 + ((y - SRC.y0) / (SRC.y1 - SRC.y0)) * (DST.y1 - DST.y0),
+]);
 
 function gradientAt(t) {
   for (let i = 1; i < STOPS.length; i += 1) {
@@ -89,7 +114,11 @@ function renderRGBA(size) {
       g = Math.round(g + (255 - g) * hi);
       b = Math.round(b + (255 - b) * hi);
 
-      if (inPolygon(x + 0.5, y + 0.5, BOLT, big)) {
+      // White shield with the bolt carved out: paint white inside the shield
+      // EXCEPT where the bolt is, so the gradient shows through the bolt.
+      const px = x + 0.5;
+      const py = y + 0.5;
+      if (inPolygon(px, py, SHIELD, big) && !inPolygon(px, py, BOLT, big)) {
         r = g = b = 255;
       }
       sup[o] = r;
